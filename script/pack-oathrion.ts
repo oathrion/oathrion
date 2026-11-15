@@ -135,6 +135,8 @@ writeFileSync(
       files: ["oathrion.mjs", "oathrion-hook.mjs", "oathrion-local.cjs", "public", "LICENSE", "NOTICE", "README.md"],
       engines: { node: ">=22" },
       keywords: ["mcp", "model-context-protocol", "ai-agents", "governance", "approval", "audit"],
+      /* Les liens de la page npm : sans eux, rien n'y mène au dépôt ni au site. */
+      ...(REPO ? { homepage: "https://oathrion.com", repository: { type: "git", url: `git+${REPO}.git` }, bugs: { url: `${REPO}/issues` } } : {}),
       dependencies,
     },
     null,
