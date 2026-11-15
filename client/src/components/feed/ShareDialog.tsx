@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import type { FeedItem } from "@/lib/api";
+import { MARK_PATH } from "@shared/brand-mark";
 import { DANGER_ACCENT, MASCOT_ACCENTS, type MascotId } from "@shared/mascots";
 import { shareText as shareWords, shareUrl, type ShareNetwork } from "@shared/share";
 
@@ -46,8 +47,7 @@ function accentFrom(sentence: string): number {
 
 const FONT = "Inter, 'Noto Sans', system-ui, sans-serif";
 const HEADLINE = "'Space Grotesk', Inter, 'Noto Sans', system-ui, sans-serif";
-const SHIELD = new Path2D("M12 1 2.5 5v7c0 6.2 4.1 11.9 9.5 13.5 5.4-1.6 9.5-7.3 9.5-13.5V5L12 1z");
-const SPARK = new Path2D("M12 7.5l1.4 4 4 1.4-4 1.4-1.4 4-1.4-4-4-1.4 4-1.4z");
+const MARK = new Path2D(MARK_PATH);
 
 /**
  * Dessine la carte, comme celle de la notification (la maquette du 11 novembre) : la mascotte
@@ -106,12 +106,10 @@ export async function drawCard(canvas: HTMLCanvasElement, item: FeedItem): Promi
   context.fillStyle = "#2D2850";
   context.fillRect(480, 548, 675, 1);
   context.save();
-  context.translate(482, 562);
-  context.scale(0.75, 0.75);
+  context.translate(480, 562);
+  context.scale(20 / 512, 20 / 512);
   context.fillStyle = accent.main;
-  context.fill(SHIELD);
-  context.fillStyle = "#FFFFFF";
-  context.fill(SPARK);
+  context.fill(MARK, "evenodd");
   context.restore();
   context.font = `500 14px ${FONT}`;
   const signed = "Protected by Oathrion · the guard for AI agents · ";

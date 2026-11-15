@@ -25,6 +25,8 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { MARK_PATH, MARK_VIEWBOX } from "@shared/brand-mark";
+
 export const POPUP_SCRIPT_NAME = "oathrion-notify-window.py";
 
 export interface PopupSpec {
@@ -117,7 +119,7 @@ button.oath-close:hover { background-color: rgba(255,255,255,.08); border-radius
 """ % {"card": CARD_BG, "border": BORDER, "glow": GLOW, "font": FONT, "main": MAIN, "high": HIGH, "deep": DEEP,
        "title": "#FFF4F5" if danger else "#F8F5FF", "body": "#C5AAB5" if danger else "#AAA9C5"}
 
-# Our icons (paths: Material icons, Apache 2.0; the shield and its spark are ours).
+# Our icons (paths: Material icons, Apache 2.0; the ring is ours, shared/brand-mark.ts).
 ICONS = {
     "close": "M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z",
     "up": "M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z",
@@ -144,10 +146,9 @@ def icon(name, color, size):
     return Gtk.Image.new_from_pixbuf(pixbuf) if pixbuf else Gtk.Label(label="")
 
 def shield(width, height):
-    svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 27" width="%d" height="%d">'
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="${MARK_VIEWBOX}" width="%d" height="%d">'
            '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="%s"/><stop offset="1" stop-color="%s"/></linearGradient></defs>'
-           '<path fill="url(#g)" d="M12 1 2.5 5v7c0 6.2 4.1 11.9 9.5 13.5 5.4-1.6 9.5-7.3 9.5-13.5V5L12 1z"/>'
-           '<path fill="#ffffff" d="M12 7.5l1.4 4 4 1.4-4 1.4-1.4 4-1.4-4-4-1.4 4-1.4z"/></svg>') % (width, height, HIGH if not danger else "#6E8BFF", "#5B3BFF" if not danger else "#4636D8")
+           '<path fill="url(#g)" fill-rule="evenodd" d="${MARK_PATH}"/></svg>') % (width, height, HIGH if not danger else "#6E8BFF", "#5B3BFF" if not danger else "#4636D8")
     pixbuf = svg_pixbuf(svg, width, height)
     return Gtk.Image.new_from_pixbuf(pixbuf) if pixbuf else Gtk.Label(label="")
 
@@ -267,7 +268,7 @@ def share_card(sentence):
     rule.set_size_request(675, 1)
     card.put(rule, 480, 548)
     foot = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-    foot.pack_start(shield(18, 20), False, False, 0)
+    foot.pack_start(shield(20, 20), False, False, 0)
     foot.pack_start(label('Protected by Oathrion · the guard for AI agents · <span foreground="%s" weight="bold">npx oathrion</span>' % HIGH, "oath-foot", markup=True), False, False, 0)
     card.put(foot, 482, 566)
     return render(back, 1200, 630)
@@ -309,7 +310,7 @@ class Card:
             widget.set_margin_top(y)
             top.add_overlay(widget)
         place(mascot_image(162), 2, 58)
-        place(shield(21, 24), 18, 15)
+        place(shield(24, 24), 16, 15)
         place(label("Oathrion", "oath-brand"), 47, 17)
         place(button(None, "oath-close", self.close, icon("close", "#9698BC", 18)), 379, 13)
         self.title = label(spec.get("title", ""), "oath-title", 232)

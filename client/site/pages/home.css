@@ -1,0 +1,145 @@
+/*
+ * L'accueil (15 novembre 2026, seconde version). Ce qui est volontairement absent : halos,
+ * dégradés, texte en dégradé, badge au-dessus du titre, étiquettes en majuscules, cartes à
+ * bordure colorée, rangée de chiffres. La couleur ne sert qu'aux verdicts (refusé, demande,
+ * passé) et aux liens. Le reste est du texte bien contrasté et de vraies sorties de terminal.
+ */
+
+.hm {
+  --hm-text: #ECEDEE;
+  --hm-muted: #A4A8AE;
+  --hm-faint: #6E737A;
+  --hm-rule: #23262B;
+  --hm-panel: #0B0C0E;
+  --hm-link: #8FB0FF;
+  --hm-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --hm-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--hm-sans);
+  color: var(--hm-text);
+}
+.hm a { color: var(--hm-link); text-decoration: underline; text-decoration-color: rgba(143, 176, 255, 0.35); text-underline-offset: 3px; }
+.hm a:hover { text-decoration-color: var(--hm-link); }
+.hm code { font-family: var(--hm-mono); font-size: 0.92em; color: var(--hm-text); }
+
+.hm-wrap { max-width: 72rem; margin: 0 auto; padding-inline: var(--gutter); }
+.hm-narrow > * { max-width: 46rem; }
+.hm-dim { color: var(--hm-faint); }
+.hm-allow { color: #4ADE9B; }
+.hm-hold { color: #F5B544; }
+.hm-block { color: #FF7A85; }
+
+/* ------------------------------------------------------------------ hero */
+
+.hm-hero { padding-block: clamp(6.5rem, 13vh, 9rem) clamp(4rem, 8vh, 6rem); }
+.hm-hero__grid { display: grid; gap: var(--s-7); align-items: start; }
+@media (min-width: 64rem) { .hm-hero__grid { grid-template-columns: 1fr 1fr; gap: var(--s-7); } }
+
+.hm-h1 {
+  font-family: var(--hm-sans);
+  font-weight: 600;
+  font-size: clamp(2.4rem, 5vw, 3.75rem);
+  line-height: 1.06;
+  letter-spacing: -0.025em;
+  max-width: 17ch;
+}
+.hm-lead { margin-top: var(--s-5); font-size: 1.1875rem; line-height: 1.6; color: var(--hm-muted); max-width: 34rem; }
+.hm-note { margin-top: var(--s-4); font-size: 0.9375rem; line-height: 1.6; color: var(--hm-faint); max-width: 34rem; }
+.hm-links { display: flex; gap: var(--s-5); margin-top: var(--s-4); font-size: 0.9375rem; }
+
+.hm-cmd {
+  display: inline-flex; align-items: center; justify-content: space-between; gap: var(--s-6);
+  margin-top: var(--s-6);
+  padding: 0.85rem 0.6rem 0.85rem 1.1rem;
+  min-width: 18rem;
+  border: 1px solid #3A3E45; border-radius: 6px;
+  background: var(--hm-panel);
+  font-family: var(--hm-mono); font-size: 1.0625rem; color: var(--hm-text);
+  cursor: pointer;
+}
+.hm-cmd:hover { border-color: #5A5F68; }
+.hm-cmd__copy {
+  padding: 0.25rem 0.55rem; border: 1px solid #3A3E45; border-radius: 4px;
+  font-size: 0.8125rem; color: var(--hm-muted);
+}
+
+/* Les terminaux : de vraies sorties, dans un cadre sans décor. */
+.hm-term {
+  margin: 0;
+  border: 1px solid var(--hm-rule); border-radius: 8px;
+  background: var(--hm-panel);
+  overflow: hidden;
+}
+.hm-term__bar {
+  padding: 0.6rem 1rem; border-bottom: 1px solid var(--hm-rule);
+  font-family: var(--hm-mono); font-size: 0.8125rem; color: var(--hm-faint);
+}
+.hm-term pre {
+  margin: 0; padding: 1.1rem 1.2rem 1.3rem;
+  font-family: var(--hm-mono); font-size: clamp(0.72rem, 0.95vw, 0.8125rem); line-height: 1.7;
+  color: #D4D6D9; white-space: pre; overflow-x: auto;
+  scrollbar-width: thin; scrollbar-color: #33373E transparent;
+}
+.hm-term b { font-weight: 500; color: var(--hm-text); }
+.hm-term--small pre { white-space: pre-wrap; }
+
+/* -------------------------------------------------------------- sections */
+
+.hm-section { padding-block: clamp(4rem, 9vh, 6.5rem); border-top: 1px solid var(--hm-rule); }
+.hm-h2 {
+  font-family: var(--hm-sans); font-weight: 600;
+  font-size: clamp(1.6rem, 2.8vw, 2.125rem); line-height: 1.15; letter-spacing: -0.015em;
+}
+.hm-sub { margin-top: var(--s-4); font-size: 1.0625rem; line-height: 1.65; color: var(--hm-muted); max-width: 40rem; }
+.hm-split { display: grid; gap: var(--s-7); align-items: center; }
+@media (min-width: 60rem) { .hm-split { grid-template-columns: 1fr 1fr; gap: var(--s-8); } }
+
+/* Les verdicts : la commande, le verdict, la phrase exacte. */
+.hm-verdicts { list-style: none; margin: var(--s-6) 0 0; padding: 0; border-top: 1px solid var(--hm-rule); }
+.hm-verdict {
+  display: grid; gap: var(--s-2) var(--s-4);
+  grid-template-columns: 1fr auto;
+  padding-block: var(--s-5);
+  border-bottom: 1px solid var(--hm-rule);
+}
+.hm-verdict__cmd { font-size: 1rem; }
+.hm-verdict__text { grid-column: 1 / -1; margin: 0; font-family: var(--hm-mono); font-size: 0.875rem; line-height: 1.6; color: var(--hm-muted); }
+.hm-tag {
+  align-self: start; padding: 0.15rem 0.5rem; border-radius: 4px;
+  font-family: var(--hm-mono); font-size: 0.8125rem;
+}
+.hm-tag--deny { color: #FF7A85; background: rgba(255, 122, 133, 0.1); }
+.hm-tag--ask { color: #F5B544; background: rgba(245, 181, 68, 0.1); }
+@media (min-width: 60rem) {
+  .hm-verdict { grid-template-columns: 22rem 6rem 1fr; align-items: baseline; }
+  .hm-verdict__text { grid-column: auto; }
+}
+
+/* La notification : la vraie forme, la mascotte de l'agent qui demande. */
+.hm-notif {
+  display: flex; gap: var(--s-4); align-items: flex-start;
+  max-width: 26rem; justify-self: center;
+  padding: 1.1rem 1.2rem;
+  border: 1px solid #33373E; border-radius: 12px;
+  background: #16181B;
+}
+.hm-notif img { width: 64px; height: 64px; flex: none; }
+.hm-notif__app { font-size: 0.8125rem; color: var(--hm-faint); }
+.hm-notif__title { margin-top: 2px; font-weight: 600; font-size: 1.0625rem; }
+.hm-notif__body { margin-top: 2px; font-size: 0.875rem; color: var(--hm-muted); }
+.hm-notif__buttons { display: flex; gap: var(--s-2); margin-top: var(--s-4); }
+.hm-notif__buttons span {
+  padding: 0.4rem 0.9rem; border-radius: 6px; border: 1px solid #3A3E45;
+  font-size: 0.875rem; color: var(--hm-text);
+}
+.hm-notif__buttons span:first-child { background: var(--hm-text); color: #0B0C0E; border-color: var(--hm-text); font-weight: 500; }
+
+.hm-video { margin-top: var(--s-6); border: 1px solid var(--hm-rule); border-radius: 8px; overflow: hidden; background: #000; }
+.hm-video video { display: block; width: 100%; aspect-ratio: 16 / 9; }
+
+.hm-list { margin: var(--s-5) 0 0; padding-left: 1.2rem; display: grid; gap: var(--s-3); color: var(--hm-muted); font-size: 1.0625rem; line-height: 1.6; }
+.hm-end { margin-top: var(--s-4); }
+
+@media (max-width: 40rem) {
+  .hm-cmd { width: 100%; min-width: 0; }
+  .hm-links { flex-wrap: wrap; gap: var(--s-4); }
+}

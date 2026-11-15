@@ -8,6 +8,8 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
+import { MARK_PATH, MARK_VIEWBOX } from "@shared/brand-mark";
+
 import { EVENTS, track } from "../lib/analytics";
 
 /* ------------------------------------------------------------------ reveal */
@@ -367,20 +369,11 @@ export function Nav(): JSX.Element {
   );
 }
 
-/**
- * La marque : trois nœuds et un passage.
- *
- * Un logotype dessiné plutôt qu'une lettre dans un carré — c'est la même grammaire que la
- * scène du Hero, réduite à sa plus petite expression : quelque chose entre, quelque chose
- * décide, quelque chose sort.
- */
+/** La marque : l'anneau torsadé d'Oathrion, le même que dans la console (`shared/brand-mark.ts`). */
 function OathrionMark(): JSX.Element {
   return (
-    <svg className="nav__mark" viewBox="0 0 28 28" aria-hidden="true">
-      <circle cx="4" cy="14" r="2.2" fill="currentColor" opacity="0.45" />
-      <rect x="9.5" y="7" width="9" height="14" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="14" cy="14" r="2.2" fill="currentColor" />
-      <circle cx="24" cy="14" r="2.2" fill="currentColor" opacity="0.45" />
+    <svg className="nav__mark" viewBox={MARK_VIEWBOX} aria-hidden="true">
+      <path fill="currentColor" fillRule="evenodd" d={MARK_PATH} />
     </svg>
   );
 }

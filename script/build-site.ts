@@ -162,7 +162,10 @@ function copyDir(from: string, to: string): number {
   }
   return total;
 }
-const imgBytes = copyDir(path.join(BUILT, "img"), path.join(OUT, "img"));
+const imgBytes = copyDir(path.join(BUILT, "img"), path.join(OUT, "img"))
+  // L'accueil montre la vidéo de démo et une mascotte sur la carte d'approbation.
+  + copyDir(path.join(BUILT, "media"), path.join(OUT, "media"))
+  + copyDir(path.join(BUILT, "mascots"), path.join(OUT, "mascots"));
 for (const f of ["favicon.png"]) {
   const src = path.join(BUILT, f);
   if (fs.existsSync(src)) fs.copyFileSync(src, path.join(OUT, f));

@@ -281,14 +281,14 @@ h1, h2, h3, .display, .h1, .h2, .h3 { font-family: var(--font-display); }
 }
 .btn:active { transform: translateY(1px); }
 
+/* Plein et sobre (15 novembre) : le dégradé avec halo était le premier signe « page générée ». */
 .btn--primary {
-  background: var(--brand-sweep);
-  color: #05091A;
-  border-color: transparent;
-  box-shadow: 0 0 0 1px rgba(156,198,255,0.28), 0 10px 34px -12px var(--flow-glow);
+  background: #ECEDEE;
+  color: #0B0C0E;
+  border-color: #ECEDEE;
   font-weight: 600;
 }
-.btn--primary:hover { filter: brightness(1.12); box-shadow: 0 0 0 1px rgba(156,198,255,0.4), 0 14px 40px -12px var(--flow-glow); }
+.btn--primary:hover { background: #FFFFFF; border-color: #FFFFFF; }
 
 .btn--ghost { border-color: var(--line-strong); color: var(--fg); }
 .btn--ghost:hover { border-color: var(--fg-faint); background: var(--bg-elevated); }

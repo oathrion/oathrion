@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { getDecision, makeDecision, shareDecision, type LocalDecision } from "@/lib/api";
 import { accentOf, glowOf } from "@/lib/mascot-style";
 import { cn } from "@/lib/utils";
+import { MARK_PATH, MARK_VIEWBOX } from "@shared/brand-mark";
 import { SHARE_NETWORKS, type ShareNetwork } from "@shared/share";
 
 const NETWORK_LABELS: Record<ShareNetwork, string> = { linkedin: "LinkedIn", x: "X", whatsapp: "WhatsApp" };
@@ -61,9 +62,8 @@ export default function DecidePage() {
         data-testid="decision-card"
       >
         <div className="flex items-center gap-2 text-sm font-semibold">
-          <svg width="18" height="20" viewBox="0 0 24 27" aria-hidden="true">
-            <path fill={accent.main} d="M12 1 2.5 5v7c0 6.2 4.1 11.9 9.5 13.5 5.4-1.6 9.5-7.3 9.5-13.5V5L12 1z" />
-            <path fill="#fff" d="M12 7.5l1.4 4 4 1.4-4 1.4-1.4 4-1.4-4-4-1.4 4-1.4z" />
+          <svg width="20" height="20" viewBox={MARK_VIEWBOX} aria-hidden="true">
+            <path fill={accent.main} fillRule="evenodd" d={MARK_PATH} />
           </svg>
           Oathrion
         </div>
