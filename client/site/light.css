@@ -1,0 +1,83 @@
+/*
+ * Le site en clair (16 novembre 2026).
+ *
+ * Chargée en dernier (`main.tsx`), cette feuille redéfinit les couleurs et les polices de tout
+ * le site, et retire les décors du thème sombre : halos, images de fond, titres en dégradé,
+ * surtitres en majuscules. Le parti pris vient des sites éditoriaux sobres (fond clair et
+ * chaud, titres en serif de graisse normale, beaucoup d'espace) plutôt que du gabarit
+ * « startup IA » sombre et violet. Les terminaux, eux, restent sombres : ce sont de vraies
+ * sorties de programme.
+ *
+ * Polices libres : Source Serif 4 (titres), Source Sans 3 (texte), Source Code Pro (code).
+ */
+
+:root {
+  --bg:            #FAFAF7;
+  --bg-raised:     #FFFFFF;
+  --bg-elevated:   #F3F2EE;
+  --bg-inset:      #F5F4F0;
+
+  --line:          #E4E2DA;
+  --line-soft:     #EDEBE5;
+  --line-strong:   #D0CDC3;
+
+  --fg:            #191917;
+  --fg-dim:        #4A4944;
+  --fg-faint:      #77756D;
+
+  --flow:          #2F5BD3;
+  --flow-bright:   #2F5BD3;
+  --flow-deep:     #1E3FA0;
+  --violet:        #4C46B8;
+  --violet-bright: #4C46B8;
+  --cyan:          #1F7F8C;
+  --flow-glow:     transparent;
+  --violet-glow:   transparent;
+
+  --allow:         #17804F;
+  --hold:          #9A5800;
+  --block:         #B9303C;
+
+  --brand-sweep:   linear-gradient(var(--line-strong), var(--line-strong));
+
+  --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-sans: "Source Sans 3", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Source Code Pro", ui-monospace, "SF Mono", Menlo, monospace;
+
+  color-scheme: light;
+}
+
+body { font-size: 1.0625rem; -webkit-font-smoothing: auto; }
+::selection { background: #D6E0FA; color: var(--fg); }
+
+/* Les titres : une serif de lecture, de graisse normale, sans effet. */
+h1, h2, h3, .display, .h1, .h2, .h3 { font-family: var(--font-display); }
+.display {
+  background: none; -webkit-text-fill-color: currentColor; color: var(--fg);
+  font-weight: 400; letter-spacing: -0.02em; line-height: 1.08;
+}
+.h1, .h2 { font-weight: 500; letter-spacing: -0.015em; }
+.h3 { font-weight: 600; letter-spacing: -0.005em; }
+
+/* Les surtitres : du texte simple, pas des étiquettes en majuscules soulignées de couleur. */
+.label {
+  font-family: var(--font-sans); font-size: 0.9375rem; font-weight: 500;
+  letter-spacing: 0; text-transform: none; color: var(--fg-faint);
+}
+.label::before { display: none; }
+
+/* Les décors du thème sombre. */
+.glow, .backdrop { display: none !important; }
+.hairline { background: var(--line); opacity: 1; }
+
+/* La barre de navigation et ses menus. */
+.nav--scrolled { background: rgba(250, 250, 247, 0.94); border-color: var(--line); }
+.nav__trigger:hover { background: rgba(0, 0, 0, 0.04); }
+.nav__menu { background: var(--bg-raised); box-shadow: 0 18px 40px -20px rgba(25, 25, 23, 0.25); }
+.nav__item:hover { background: var(--bg-elevated); }
+
+/* Les boutons : un plein encre, un contour. */
+.btn--primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.btn--primary:hover { background: #000; border-color: #000; }
+.btn--ghost { border-color: var(--line-strong); color: var(--fg); }
+.btn--ghost:hover { background: var(--bg-elevated); border-color: var(--fg-faint); }

@@ -15,6 +15,7 @@ import { configureTransport, redirectTransport, routedTransport } from "./lib/su
 import "./styles.css";
 import "./components/shell.css";
 import "./components/flow.css";
+import "./light.css";
 
 /*
  * La classe `js` arme les apparitions.
