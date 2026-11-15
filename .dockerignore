@@ -1,0 +1,38 @@
+# Everything excluded here is excluded from the BUILD CONTEXT, which means it can never
+# end up in a layer even by mistake. The two groups below have different reasons.
+
+# ── Must never enter the image: secrets and local data ───────────────────────
+# A developer's .env holds OATHRION_SESSION_SECRET, OATHRION_KEK and console passwords. A local
+# data.db holds real rows. Both would be baked into a layer and would survive any later
+# deletion, because layers are additive.
+.env
+.env.*
+*.pem
+*.key
+data.db
+data.db-shm
+data.db-wal
+
+# ── Excluded because they would be wrong or wasteful, not because they are secret ──
+# node_modules: the image installs from the lockfile instead. Copying a host tree would
+# bring in native binaries compiled for the host's libc and defeat determinism.
+node_modules
+dist
+.vite
+
+.git
+.gitignore
+.github
+
+# Build artefacts and reports from local runs.
+*.log
+.mutation-backup
+coverage
+*.tsbuildinfo
+
+# Documentation is not needed by the running server.
+AUDIT-REPRISE.md
+*.md
+!package.json
+
+.DS_Store

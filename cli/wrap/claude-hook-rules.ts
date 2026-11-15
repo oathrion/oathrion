@@ -1,0 +1,721 @@
+/**
+ * Les règles du hook Claude Code : juger un appel d'outil INTÉGRÉ avant qu'il s'exécute.
+ *
+ * Décidé le 5 novembre 2026 (`notes/CONCEPTION-HOOK-CLAUDE-CODE.md`) : Claude Code exécute son
+ * shell et ses écritures de fichiers lui-même, sans passer par MCP, donc sans Oathrion. Son hook
+ * `PreToolUse` appelle `oathrion hook claude-code pre`, qui rend l'un de trois verdicts :
+ *
+ *   · `deny`  — l'outil ne s'exécute pas, et l'agent lit le motif ;
+ *   · `ask`   — Claude Code pose SA question, avec le motif d'Oathrion ;
+ *   · `null`  — rien : Claude Code applique ses permissions habituelles.
+ *
+ * JAMAIS `allow` : un `allow` ferait sauter les permissions de Claude Code (observé le
+ * 5 novembre). Oathrion ajoute des garde-fous, il n'en retire aucun.
+ *
+ * Ce module est une fonction PURE : le système de fichiers et git lui sont passés
+ * (`RuleContext`). Elle juge la ligne de commande telle qu'écrite, pas ce qu'elle fera : un
+ * script peut cacher un `rm`. Ce n'est pas un bac à sable, et la documentation le dit.
+ */
+
+import { isAbsolute, relative, resolve } from "node:path";
+
+import { findSecrets, redactSecrets } from "@shared/secrets";
+
+import { carriesDecoy, type Decoys } from "./decoys";
+import { guardedTokenIn, serverTokenReason, type GuardedTokens } from "./guarded-tokens";
+
+/** `allow` n'est jamais rendu par les règles : seulement après l'approbation explicite d'une personne (`claude-hook.ts`). */
+export type HookVerdict = "deny" | "ask" | "allow" | null;
+
+/** Les outils intégrés que le hook juge. Les lectures ne sont pas interceptées. */
+export const GOVERNED_TOOLS = ["Bash", "Write", "Edit", "MultiEdit", "NotebookEdit"] as const;
+export const HOOK_MATCHER = GOVERNED_TOOLS.join("|");
+
+export interface ToolCall {
+  tool: string;
+  input: Record<string, unknown>;
+}
+
+export interface RuleContext {
+  /** Le dossier du projet de la session (`CLAUDE_PROJECT_DIR`, sinon le dossier courant). */
+  projectDir: string;
+  home: string;
+  /** Les dossiers temporaires où l'agent peut écrire librement (le dossier temporaire, son brouillon). */
+  scratchDirs: string[];
+  exists: (path: string) => boolean;
+  /** `true` suivi par git, `false` non suivi, `null` pas de dépôt git. */
+  tracked: (path: string) => boolean | null;
+  /** Les règles que la personne a désactivées, par identifiant. */
+  disabled?: ReadonlySet<string>;
+  /** Ses motifs à elle, sur les commandes du shell. */
+  extraDeny?: readonly { id: string; pattern: RegExp; reason: string }[];
+  extraAsk?: readonly { id: string; pattern: RegExp; reason: string }[];
+  /** La session a lu du contenu non fiable (`untrustedSource`) : ses sorties demandent une personne. */
+  taint?: Taint | null;
+  /** Les leurres posés (`oathrion decoys`) : une valeur qui apparaît est refusée. */
+  decoys?: Decoys | null;
+  /** Les empreintes des jetons des serveurs protégés (`guarded-tokens.ts`). */
+  guarded?: GuardedTokens | null;
+}
+
+/** Ce que la session a lu de non fiable, et quand : la PREMIÈRE lecture, qui la marque. */
+export interface Taint {
+  source: string;
+  at: string;
+}
+
+export interface Judgement {
+  verdict: HookVerdict;
+  /** L'identifiant de la règle qui a jugé, ou `null`. */
+  rule: string | null;
+  reason: string | null;
+  action: "claude.shell" | "claude.file.write" | "claude.tool";
+  /** `shell://<projet>`, `file://<chemin absolu>` ou `tool://<outil>`. */
+  target: string;
+  /** Une suppression refusée : les chemins absolus qu'elle visait, pour dire ce qu'elle aurait effacé. */
+  deleting?: string[];
+  /** Un appel d'outil (le web, un serveur MCP) : ce qu'il fait, secrets masqués, pour le journal. */
+  description?: string;
+}
+
+/** Les identifiants des règles livrées, pour `disable`. */
+export const RULE_IDS = [
+  "rm-outside-project",
+  "git-force-push",
+  "pipe-to-shell",
+  "chmod-777-recursive",
+  "write-outside-project",
+  "protect-guard-files",
+  "git-push",
+  "package-publish",
+  "overwrite-untracked",
+  "tainted-session",
+  "decoy",
+  "server-token",
+] as const;
+
+const PREFIX = "Oathrion";
+
+/**
+ * Coupe une ligne de commande en commandes simples. Au-delà de `;`, `&&`, `||`, `|` et des
+ * retours à la ligne, elle respecte les guillemets, ouvre les sous-shells et les groupes
+ * (`( … )`, `{ … }`), sépare l'arrière-plan (`&`), et DESCEND dans ce qui relance un shell —
+ * `bash -c "…"`, `sh -c '…'`, `eval …`, `xargs …`, `timeout … bash -c …`. Sans quoi une commande
+ * dangereuse emboîtée (`bash -c 'rm -rf ~'`) passait sans être vue (audit du 8 novembre).
+ *
+ * Ce n'est toujours PAS un analyseur de shell : une commande dont le programme vient d'une
+ * substitution (`` `echo rm` ``, `$(…)`) reste illisible. `judgeShell` la traite à part.
+ */
+export function splitCommands(command: string): string[] {
+  const { rest, bodies } = heredocs(command);
+  return [...expandCommands(rest, 0), ...bodies.filter((b) => SHELL_PROGRAMS.has(b.program)).flatMap((b) => expandCommands(b.body, 1))];
+}
+
+/*
+ * LES HEREDOCS (`<<EOF … EOF`) : leur contenu n'est des commandes que s'il va à un shell
+ * (`bash <<EOF`). Passé à un interpréteur (`python3 - <<EOF`), c'est du code, où l'on cherche
+ * le réseau ; sinon (`cat > f <<EOF`), de la donnée. Vu le 9 novembre : la chaîne `"http"` d'un
+ * script Python était lue comme la commande réseau `http`, et un heredoc qui ne faisait que
+ * CONTENIR « curl … | sh » était refusé comme s'il le lançait.
+ */
+const INTERPRETERS = new Set(["python", "python3", "node", "deno", "bun", "ruby", "perl", "php"]);
+
+function heredocs(command: string): { rest: string; bodies: { program: string; body: string }[] } {
+  const lines = command.split("\n");
+  const kept: string[] = [];
+  const bodies: { program: string; body: string }[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i]!;
+    kept.push(line);
+    const opened = /(?:^|[^<])<<(-?)\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/.exec(line);
+    if (!opened) continue;
+    const [, dash, , delimiter] = opened;
+    const body: string[] = [];
+    let j = i + 1;
+    for (; j < lines.length; j += 1) {
+      const candidate = dash ? lines[j]!.replace(/^\t+/, "") : lines[j]!;
+      if (candidate.trim() === delimiter) break;
+      body.push(lines[j]!);
+    }
+    const before = line.slice(0, opened.index + (opened[0].startsWith("<") ? 0 : 1));
+    const parts = topLevelParts(before);
+    const owner = program(words(parts[parts.length - 1] ?? ""))[0]?.split("/").pop() ?? "";
+    bodies.push({ program: owner, body: body.join("\n") });
+    i = j;
+  }
+  return { rest: kept.join("\n"), bodies };
+}
+
+/** Du code envoyé à un interpréteur qui parle au réseau. */
+const NETWORK_CODE = /https?:\/\/|requests|urllib|fetch\(|http\.|socket|LWP|Net::/i;
+
+const SHELL_PROGRAMS = new Set(["sh", "bash", "zsh", "dash", "ksh", "fish", "ash"]);
+
+/** Les commandes simples d'une ligne, guillemets respectés, en descendant dans les shells imbriqués. */
+function expandCommands(command: string, depth: number): string[] {
+  const out: string[] = [];
+  for (const part of topLevelParts(command)) {
+    const tokens = program(words(part));
+    out.push(part);
+    if (depth >= 4) continue;
+    const base = tokens[0]?.split("/").pop();
+    /* `bash -c "…"`, `sh -c '…'` : le vrai travail est dans l'argument de `-c`. */
+    if (base !== undefined && SHELL_PROGRAMS.has(base)) {
+      const flag = tokens.indexOf("-c");
+      if (flag >= 0 && tokens[flag + 1] !== undefined) out.push(...expandCommands(tokens[flag + 1]!, depth + 1));
+    } else if (base === "eval") {
+      /* `eval '…'` : ses arguments, mis bout à bout, sont une commande. */
+      const rest = tokens.slice(1).join(" ");
+      if (rest !== "") out.push(...expandCommands(rest, depth + 1));
+    } else if (base === "xargs" || base === "watch" || base === "entr") {
+      /* `xargs -n1 rm -rf` : après ses propres options, le reste est la commande qu'il lance. */
+      const valued = new Set(["-I", "-i", "-n", "-L", "-l", "-P", "-s", "-d", "-E", "-e", "-a", "-c", "--max-args", "--max-procs", "--delimiter", "--arg-file"]);
+      let i = 1;
+      while (i < tokens.length && tokens[i]!.startsWith("-")) i += valued.has(tokens[i]!) ? 2 : 1;
+      const rest = tokens.slice(i).map((t) => (/\s/.test(t) ? `'${t}'` : t)).join(" ");
+      if (rest !== "") out.push(...expandCommands(base === "xargs" ? rest : (tokens[i] ?? ""), depth + 1));
+    }
+  }
+  return out;
+}
+
+/** Coupe sur les opérateurs de haut niveau (hors guillemets) et ouvre les sous-shells et les groupes. */
+function topLevelParts(command: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let quote: '"' | "'" | null = null;
+  for (let i = 0; i < command.length; i += 1) {
+    const ch = command[i]!;
+    const next = command[i + 1];
+    if (quote) {
+      if (ch === quote) quote = null;
+      else if (ch === "\\" && quote === '"' && next !== undefined) { current += next; i += 1; continue; }
+      current += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; current += ch; continue; }
+    if (ch === "\\" && next !== undefined) { current += next; i += 1; continue; }
+    /* `(`, `)`, `{`, `}`, `;`, `&`, `|`, `\n` et les doublés `&&` `||` : des frontières. */
+    if (ch === "\n" || ch === ";" || ch === "(" || ch === ")" || ch === "{" || ch === "}") { parts.push(current); current = ""; continue; }
+    /* Mais pas les redirections `2>&1`, `&>fichier`, `>|fichier`, qui ne séparent rien. */
+    const prev = command[i - 1];
+    if ((ch === "&" && (prev === ">" || next === ">")) || (ch === "|" && prev === ">")) { current += ch; continue; }
+    if (ch === "&" || ch === "|") { parts.push(current); current = ""; if (next === ch) i += 1; continue; }
+    current += ch;
+  }
+  parts.push(current);
+  return parts.map((part) => part.trim()).filter((part) => part !== "" && part !== "-");
+}
+
+/**
+ * Découpe une commande simple en mots, comme le shell : les guillemets simples et doubles, les
+ * barres obliques inverses, et les morceaux accolés qui forment UN mot (`r''m` est `rm`,
+ * `"a"b` est `ab` ; audit du 8 novembre).
+ */
+export function words(command: string): string[] {
+  const out: string[] = [];
+  let current = "";
+  let inWord = false;
+  let quote: '"' | "'" | null = null;
+  for (let i = 0; i < command.length; i += 1) {
+    const ch = command[i]!;
+    const next = command[i + 1];
+    if (quote) {
+      if (ch === quote) quote = null;
+      else if (ch === "\\" && quote === '"' && next !== undefined && '"\\$`'.includes(next)) { current += next; i += 1; }
+      else current += ch;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (inWord) out.push(current);
+      current = "";
+      inWord = false;
+      continue;
+    }
+    inWord = true;
+    if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === "\\" && next !== undefined) { current += next; i += 1; }
+    else current += ch;
+  }
+  if (inWord) out.push(current);
+  return out;
+}
+
+/*
+ * Les préfixes qui lancent la VRAIE commande après eux, avec leurs options. Leurs options qui
+ * prennent une valeur sont sautées avec elle : `sudo -u root rm …` est un `rm`, `timeout 5 rm …`
+ * aussi (audit du 8 novembre : leurs options faisaient croire que le programme était « -u »).
+ */
+const WRAPPERS: Record<string, { valued: readonly string[]; positional?: number }> = {
+  sudo: { valued: ["-u", "-g", "-p", "-C", "-h", "-U", "-r", "-t", "-D"] },
+  doas: { valued: ["-u", "-C"] },
+  env: { valued: ["-u", "-C", "-S", "--unset", "--chdir"] },
+  nice: { valued: ["-n", "--adjustment"] },
+  ionice: { valued: ["-c", "-n", "-p", "-P", "-u"] },
+  timeout: { valued: ["-s", "--signal", "-k", "--kill-after"], positional: 1 },
+  stdbuf: { valued: ["-i", "-o", "-e"] },
+  chrt: { valued: [], positional: 1 },
+  taskset: { valued: [], positional: 1 },
+  command: { valued: [] },
+  /* Les mots du shell devant une commande : `if`, `then rm …`, `do rm …`, `! rm …`. */
+  if: { valued: [] },
+  then: { valued: [] },
+  else: { valued: [] },
+  elif: { valued: [] },
+  do: { valued: [] },
+  while: { valued: [] },
+  until: { valued: [] },
+  "!": { valued: [] },
+  builtin: { valued: [] },
+  exec: { valued: ["-a"] },
+  nohup: { valued: [] },
+  time: { valued: ["-f", "-o"] },
+  setsid: { valued: [] },
+  unbuffer: { valued: [] },
+};
+
+/** Les mots d'une commande sans ses préfixes (`sudo -u x`, `env -i A=b`, `timeout 5`, `nice -n 3`…). */
+function program(tokens: string[]): string[] {
+  let i = 0;
+  while (i < tokens.length) {
+    const token = tokens[i]!;
+    const base = token.split("/").pop() ?? token;
+    const wrapper = WRAPPERS[base];
+    if (wrapper) {
+      i += 1;
+      let positional = wrapper.positional ?? 0;
+      while (i < tokens.length) {
+        const arg = tokens[i]!;
+        if (arg === "--") { i += 1; break; }
+        if (wrapper.valued.includes(arg)) { i += 2; continue; }
+        if (arg.startsWith("-") && arg.length > 1) { i += 1; continue; }
+        if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg)) { i += 1; continue; }
+        if (positional > 0) { positional -= 1; i += 1; continue; }
+        break;
+      }
+    } else if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) i += 1;
+    else break;
+  }
+  return tokens.slice(i);
+}
+
+const under = (path: string, dir: string) => {
+  const rel = relative(dir, path);
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+};
+
+function expandHome(path: string, home: string): string {
+  if (path === "~" || path === "$HOME" || path === "${HOME}") return home;
+  if (path.startsWith("~/")) return resolve(home, path.slice(2));
+  if (path.startsWith("$HOME/")) return resolve(home, path.slice(6));
+  if (path.startsWith("${HOME}/")) return resolve(home, path.slice(8));
+  return path;
+}
+
+/**
+ * Un chemin que l'agent peut librement toucher : dans le projet, ou dans un dossier temporaire.
+ * Jamais le projet lui-même, ni le dossier personnel, ni un dossier qui contient l'un des deux,
+ * où qu'ils soient (un projet ou un dossier personnel peut vivre sous `/tmp`).
+ */
+function freeToTouch(path: string, ctx: RuleContext, cwd: string): boolean {
+  const absolute = resolve(cwd, expandHome(path, ctx.home));
+  if (under(resolve(ctx.projectDir), absolute) || under(resolve(ctx.home), absolute)) return false;
+  return under(absolute, ctx.projectDir) || ctx.scratchDirs.some((dir) => under(absolute, dir));
+}
+
+function judgeShell(command: string, ctx: RuleContext): { verdict: HookVerdict; rule: string; reason: string; deleting?: string[] } | null {
+  const on = (id: string) => !ctx.disabled?.has(id);
+  const parts = splitCommands(command).map((part) => program(words(part)));
+  /* Le dossier où chaque commande s'exécute : `cd ~ && rm -rf *` vise le dossier personnel. */
+  let cwd = ctx.projectDir;
+
+  for (const [cmd, ...args] of parts) {
+    if (cmd === undefined) continue;
+    const base = cmd.split("/").pop();
+
+    if (base === "cd" || base === "pushd") {
+      const to = args.find((a) => !a.startsWith("-"));
+      cwd = to === undefined ? ctx.home : resolve(cwd, expandHome(to, ctx.home));
+      continue;
+    }
+
+    if (on("protect-guard-files")) {
+      const guarded = guardTarget(base ?? "", args, ctx, cwd);
+      if (guarded) return { verdict: "deny", rule: "protect-guard-files", reason: `${PREFIX} refuses that the agent changes the files that guard it, or reads its secrets (${guarded}).` };
+    }
+
+    if (on("rm-outside-project") && base === "rm") {
+      const flags = args.filter((a) => a.startsWith("-") && a !== "--");
+      const recursive = flags.some((f) => f === "--recursive" || (/^-[a-zA-Z]+$/.test(f) && /[rR]/.test(f)));
+      const targets = args.filter((a) => !a.startsWith("-"));
+      const outside = targets.find((t) => t === "/" || t === "/*" || !freeToTouch(t, ctx, cwd));
+      if (recursive && outside !== undefined) {
+        /* « dossier/* » vise le contenu du dossier : on mesure le dossier. */
+        const deleting = targets.map((t) => resolve(cwd, expandHome(t.replace(/\/?\*$/, "") || "/", ctx.home)));
+        return { verdict: "deny", rule: "rm-outside-project", reason: `${PREFIX} refuses a recursive delete outside the project (${outside}).`, deleting };
+      }
+    }
+
+    /* `find … -delete`, `find … -exec rm` : une suppression récursive, elle aussi. */
+    if (on("rm-outside-project") && base === "find") {
+      const firstExpr = args.findIndex((a) => a.startsWith("-") || a === "(" || a === "!");
+      const roots = (firstExpr < 0 ? args : args.slice(0, firstExpr)).filter((a) => a !== "");
+      const exec = args.flatMap((a, i) => (["-exec", "-execdir", "-ok", "-okdir"].includes(a) ? [args[i + 1]?.split("/").pop()] : []));
+      const deletes = args.includes("-delete") || exec.some((program) => program === "rm" || program === "shred" || program === "unlink");
+      /* `find . -name '*.log' -delete` dans le projet est ordinaire : le projet lui-même est permis comme racine. */
+      const inProject = (root: string) => resolve(cwd, expandHome(root, ctx.home)) === resolve(ctx.projectDir);
+      const outside = (roots.length > 0 ? roots : ["."]).find((root) => !inProject(root) && !freeToTouch(root, ctx, cwd));
+      if (deletes && outside !== undefined) {
+        const deleting = (roots.length > 0 ? roots : ["."]).map((root) => resolve(cwd, expandHome(root, ctx.home)));
+        return { verdict: "deny", rule: "rm-outside-project", reason: `${PREFIX} refuses a recursive delete outside the project (find ${outside}).`, deleting };
+      }
+    }
+
+    if (base === "git" && gitSubcommand(args)[0] === "push") {
+      const push = gitSubcommand(args);
+      if (on("git-force-push") && push.some((a) => a === "--force" || a === "-f" || /^-[a-zA-Z]*f[a-zA-Z]*$/.test(a) || /^\+/.test(a))) {
+        return { verdict: "deny", rule: "git-force-push", reason: `${PREFIX} refuses a forced push: it can erase other people's commits.` };
+      }
+      if (on("git-push")) {
+        return { verdict: "ask", rule: "git-push", reason: `${PREFIX}: a push publishes your commits. Allow it?` };
+      }
+    }
+
+    if (on("chmod-777-recursive") && base === "chmod") {
+      const recursive = args.some((a) => a === "--recursive" || /^-[a-zA-Z]*R[a-zA-Z]*$/.test(a));
+      if (recursive && args.some((a) => a === "777" || a === "a+rwx" || a === "ugo+rwx")) {
+        return { verdict: "deny", rule: "chmod-777-recursive", reason: `${PREFIX} refuses making a whole tree writable by everyone (chmod -R 777).` };
+      }
+    }
+
+    if (on("package-publish") && ((["npm", "pnpm", "yarn"].includes(base ?? "") && args[0] === "publish") || (base === "cargo" && args[0] === "publish"))) {
+      return { verdict: "ask", rule: "package-publish", reason: `${PREFIX}: publishing a package makes it public. Allow it?` };
+    }
+  }
+
+  /* Le texte d'un heredoc qui n'est que de la donnée ne « lance » rien ; celui qui va à un shell, si. */
+  const { rest, bodies } = heredocs(command);
+  const runnable = [rest, ...bodies.filter((b) => SHELL_PROGRAMS.has(b.program)).map((b) => b.body)].join("\n");
+  if (on("pipe-to-shell") && runsFromNetwork(runnable)) {
+    return { verdict: "deny", rule: "pipe-to-shell", reason: `${PREFIX} refuses running a script straight from the network (curl … | sh).` };
+  }
+
+  /*
+   * Une commande dont le PROGRAMME sort d'une substitution (`` `…` ``, `$(…)`, `$VAR`) : Oathrion
+   * ne peut pas savoir ce qu'elle lance. Dans une session à risque, elle demande une personne.
+   */
+  if (on("tainted-session") && ctx.taint && parts.some(([cmd]) => cmd !== undefined && (cmd.startsWith("$") || cmd.includes("`")))) {
+    return { verdict: "ask", rule: "tainted-session", reason: `${PREFIX}: this session read untrusted content (${ctx.taint.source}, at ${ctx.taint.at.slice(11, 16)} UTC), and this command runs a program Oathrion cannot read. It needs a person. Allow it?` };
+  }
+
+  for (const extra of ctx.extraDeny ?? []) {
+    if (extra.pattern.test(command)) return { verdict: "deny", rule: extra.id, reason: `${PREFIX}: ${extra.reason}` };
+  }
+  for (const extra of ctx.extraAsk ?? []) {
+    if (extra.pattern.test(command)) return { verdict: "ask", rule: extra.id, reason: `${PREFIX}: ${extra.reason}` };
+  }
+  return null;
+}
+
+/** Les fichiers qui gardent Oathrion et Claude Code eux-mêmes : l'agent n'y écrit pas. */
+function guardFile(path: string, ctx: RuleContext): boolean {
+  const absolute = resolve(path);
+  const home = resolve(ctx.home);
+  const name = absolute.split(/[\\/]/).pop() ?? "";
+  return (
+    (/[\\/]\.claude[\\/](settings|settings\.local)\.json$/.test(absolute)) ||
+    name === ".mcp.json" ||
+    absolute === resolve(home, ".claude.json") ||
+    under(absolute, resolve(home, ".oathrion"))
+  );
+}
+
+/** Un secret d'Oathrion, sous `~/.oathrion` : ce que l'agent ne doit même pas lire. */
+function oathrionSecret(absolute: string, ctx: RuleContext): boolean {
+  if (!under(absolute, resolve(ctx.home, ".oathrion"))) return false;
+  const name = absolute.split(/[\\/]/).pop() ?? "";
+  /* Le coffre des jetons de serveurs (`server-secrets.ts`) : tout ce qui est dessous. */
+  if (under(absolute, resolve(ctx.home, ".oathrion", "_local", "server-secrets"))) return true;
+  return ["session.secret", "receipt-signing-key.pem", "decoys.json"].includes(name) || /\.(db|sqlite|sqlite3)(-wal|-shm)?$/.test(name) || /\.pem$/.test(name);
+}
+
+/* Les programmes qui ne font que LIRE les chemins qu'on leur donne (hors redirection). */
+const READ_ONLY = new Set(["cat", "less", "more", "head", "tail", "grep", "egrep", "fgrep", "rg", "ag", "jq", "yq", "ls", "stat", "file", "wc", "diff", "cmp", "md5sum", "sha1sum", "sha256sum", "shasum", "test", "[", "readlink", "realpath", "du", "find", "bat", "od", "xxd", "hexdump", "oathrion"]);
+
+/**
+ * LES FICHIERS DE GARDE, PAR LE SHELL AUSSI (audit du 8 novembre). L'outil d'écriture de Claude
+ * Code ne pouvait pas toucher `~/.claude/settings.json` ni `~/.oathrion`, mais une redirection,
+ * `sed -i`, `cp`, `mv` ou `rm` le pouvaient : un agent manipulé retirait le hook avant d'agir.
+ * Une redirection vers un fichier de garde est refusée ; un autre programme qui en NOMME un aussi,
+ * sauf s'il ne fait que lire (`cat`, `grep`, `jq`… ; `sed` et `perl` sans `-i`).
+ */
+function guardTarget(base: string, args: readonly string[], ctx: RuleContext, cwd: string): string | null {
+  const guarded = (token: string) => {
+    const path = token.replace(/^--?[A-Za-z0-9-]+=/, "");
+    if (path === "" || !(/[\\/]/.test(path) || path.startsWith("~") || path.startsWith("$HOME") || path.startsWith("${HOME}") || path === ".mcp.json" || path === ".claude.json")) return null;
+    return guardFile(resolve(cwd, expandHome(path, ctx.home)), ctx) ? path : null;
+  };
+  /*
+   * Les SECRETS d'Oathrion (le secret de session du pivot, la clé qui signe les reçus, le registre
+   * des leurres, la base) : même les lire est refusé. Avec le premier, un agent ouvrait la console
+   * et approuvait ses propres demandes ; avec le registre, il savait quels secrets sont des leurres.
+   */
+  const secret = args.map((a) => a.replace(/^(?:\d*|&)?[<>]{1,2}\|?/, "").replace(/^--?[A-Za-z0-9-]+=/, "")).find((a) => a !== "" && oathrionSecret(resolve(cwd, expandHome(a, ctx.home)), ctx));
+  if (secret) return secret;
+  const inPlace = (base === "sed" || base === "perl") && args.some((a) => /^-[a-zA-Z]*i/.test(a) || a.startsWith("--in-place"));
+  const readOnly = (READ_ONLY.has(base) || base === "sed" || base === "perl" || base === "awk") && !inPlace;
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i]!;
+    /* `> f`, `>> f`, `2> f`, `&> f`, `>| f`, et collés : `>f`. */
+    const redirect = /^(?:\d*|&)>>?\|?(.*)$/.exec(arg);
+    if (redirect) {
+      const target = redirect[1] !== "" ? redirect[1]! : (args[i + 1] ?? "");
+      if (target !== "" && guarded(target)) return target;
+      continue;
+    }
+    if (!readOnly) {
+      const hit = guarded(arg);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+/** Les options globales de git avant la sous-commande (`git -C . push`, `git -c a=b push`). */
+function gitSubcommand(args: readonly string[]): string[] {
+  const valued = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--config-env", "--super-prefix"]);
+  let i = 0;
+  while (i < args.length && args[i]!.startsWith("-")) i += valued.has(args[i]!) ? 2 : 1;
+  return args.slice(i);
+}
+
+/**
+ * Un script lancé directement depuis le réseau : téléchargé et passé à un shell ou à un
+ * interpréteur par un tube, par une substitution de processus (`<(…)`), ou par `-c "$(…)"`.
+ */
+function runsFromNetwork(command: string): boolean {
+  const fetcher = String.raw`\b(?:curl|wget)\b`;
+  const runner = String.raw`(?:(?:ba|z|da|k|fi|a)?sh|python[0-9.]*|perl|ruby|node|php|deno|bun)`;
+  return (
+    new RegExp(String.raw`${fetcher}[^|]*\|\s*(?:sudo\s+(?:-\S+\s+)*)?(?:env\s+)?${runner}\b`).test(command) ||
+    new RegExp(String.raw`(?:\b${runner}|\bsource|(?:^|\s)\.)\s+(?:-\S+\s+)*<\(\s*${fetcher}`).test(command) ||
+    new RegExp(String.raw`(?:\b${runner}|\beval)\b[^;&|]*(?:\$\(|\x60)\s*${fetcher}`).test(command)
+  );
+}
+
+/**
+ * La mémoire de Claude Code POUR CE PROJET (`~/.claude/projects/<projet encodé>/memory`) : c'est
+ * Claude Code qui y tient ses notes d'une session à l'autre. Refusée comme « hors du projet »,
+ * elle bloquait tout utilisateur qui l'a activée (vu le 6 novembre sur la session de travail
+ * d'Oathrion même ; autorisée par l'utilisateur). Seulement CE projet, et seulement ce dossier :
+ * les réglages de Claude Code restent protégés (`guardFile`).
+ */
+export function claudeMemoryDir(ctx: Pick<RuleContext, "home" | "projectDir">): string {
+  return resolve(ctx.home, ".claude", "projects", resolve(ctx.projectDir).replace(/[^a-zA-Z0-9]/g, "-"), "memory");
+}
+
+function judgeWrite(tool: string, filePath: string, ctx: RuleContext): { verdict: HookVerdict; rule: string; reason: string } | null {
+  const on = (id: string) => !ctx.disabled?.has(id);
+  const absolute = resolve(ctx.projectDir, expandHome(filePath, ctx.home));
+  if (on("protect-guard-files") && guardFile(absolute, ctx)) {
+    return { verdict: "deny", rule: "protect-guard-files", reason: `${PREFIX} refuses that the agent edits the files that guard it (${absolute}).` };
+  }
+  const memory = under(absolute, claudeMemoryDir(ctx));
+  if (on("write-outside-project") && !memory && !freeToTouch(absolute, ctx, ctx.projectDir)) {
+    return { verdict: "deny", rule: "write-outside-project", reason: `${PREFIX} refuses a write outside the project (${absolute}).` };
+  }
+  /* Un fichier DU PROJET ne profite jamais de l'exemption des dossiers temporaires (un projet peut vivre sous /tmp). */
+  const scratch = !under(absolute, ctx.projectDir) && ctx.scratchDirs.some((dir) => under(absolute, dir));
+  if (on("overwrite-untracked") && tool === "Write" && ctx.exists(absolute) && ctx.tracked(absolute) !== true && !scratch && !memory) {
+    return { verdict: "ask", rule: "overwrite-untracked", reason: `${PREFIX}: this replaces an existing file that git does not track, so it cannot be restored. Allow it?` };
+  }
+  return null;
+}
+
+/**
+ * UNE QUESTION QUE PERSONNE NE VERRA DEVIENT UN REFUS (essai du 5 novembre).
+ *
+ * `ask` laisse Claude Code poser SA question. Mais en mode automatique (« auto mode on »), c'est
+ * un classifieur qui y répond, pas une personne : l'utilisateur a vu `git push` partir sans qu'on
+ * lui demande rien. Ici, une question n'a de sens que si quelqu'un la lit. Les modes où Claude
+ * Code demande à une personne : `default`, `manual`, `plan` ; `acceptEdits` accepte seul les
+ * écritures de fichiers, pas le shell. Tout autre mode — `auto`, `bypassPermissions`, `dontAsk`,
+ * ou un mode encore inconnu — ne demande à personne : la question devient un refus, et le motif
+ * dit comment faire passer l'action.
+ */
+export function personIsAsked(mode: string | undefined, tool: string): boolean {
+  if (mode === undefined || mode === "" || mode === "default" || mode === "manual" || mode === "plan") return true;
+  if (mode === "acceptEdits") return !["Write", "Edit", "MultiEdit", "NotebookEdit"].includes(tool);
+  return false;
+}
+
+export function forMode(judgement: Judgement, mode: string | undefined, tool: string): Judgement {
+  if (judgement.verdict !== "ask" || personIsAsked(mode, tool)) return judgement;
+  const why = (judgement.reason ?? `${PREFIX}: this action`).replace(/\s*Allow it\?$/, "");
+  return {
+    ...judgement,
+    verdict: "deny",
+    reason: `${why} A person must say yes, and Claude Code is in "${String(mode)}" mode, which asks no one: refused. Switch to the default mode (Shift+Tab) and ask again, or run it yourself.`,
+  };
+}
+
+/*
+ * LA SESSION À RISQUE (décision du 7 novembre) — Oathrion ne devine pas une injection de
+ * consignes (prompt injection) : il sait d'où vient ce que l'agent a lu. Une page web, une
+ * recherche, un ticket, un e-mail ou un message lus par un outil MCP sont du contenu NON FIABLE :
+ * quelqu'un d'autre l'a écrit, et il peut contenir des consignes. Dès la première lecture, la
+ * session est marquée ; jusqu'à sa fin, ce qui peut faire SORTIR quelque chose (le réseau, une
+ * publication, un push, un message) ou s'installer pour plus tard (un workflow de CI, un hook
+ * git) demande une personne, et la question dit pourquoi. La provenance peut se perdre (un
+ * contenu recopié dans un fichier qu'une autre session relira) : c'est dit dans la doc.
+ */
+export const TAINT_MATCHER = "WebFetch|WebSearch|mcp__.*";
+const UNTRUSTED_NAME = /fetch|brows|web|url|search|scrap|crawl|issue|pull_?request|comment|discussion|mail|inbox|message|slack|discord|teams|notion|jira|linear|ticket|rss|feed|tweet|post/i;
+const READ_VERB = /^(get|read|list|search|fetch|browse|view|show|find|query|retrieve|download|navigate|open|scrape|crawl|lookup)/i;
+
+/** Une lecture de contenu écrit par d'autres : sa description (« WebFetch example.com »), ou null. */
+export function untrustedSource(tool: string, input: Record<string, unknown>): string | null {
+  if (tool === "WebFetch") {
+    try {
+      return `WebFetch ${new URL(String(input.url ?? "")).host}`;
+    } catch {
+      return "WebFetch";
+    }
+  }
+  if (tool === "WebSearch") return "WebSearch";
+  const mcp = /^mcp__(.+?)__(.+)$/.exec(tool);
+  if (mcp && READ_VERB.test(mcp[2]!) && (UNTRUSTED_NAME.test(mcp[1]!) || UNTRUSTED_NAME.test(mcp[2]!))) return `${mcp[1]!} ${mcp[2]!}`;
+  return null;
+}
+
+/* Le réseau, y compris ce qui sort par une requête DNS ou un écho (`dig $(…).domaine`) : audit du 8 novembre. */
+const NETWORK = new Set([
+  "curl", "wget", "http", "https", "xh", "nc", "ncat", "netcat", "telnet", "socat", "scp", "sftp", "ftp", "tftp", "lftp", "ssh", "mail", "mailx", "sendmail", "mutt", "aria2c",
+  "dig", "nslookup", "host", "drill", "kdig", "whois", "ping", "ping6", "traceroute", "tracepath", "smbclient", "ldapsearch",
+]);
+const GH_WRITES = /^(create|comment|edit|close|reopen|merge|review|delete|api|upload|fork|set|sync|transfer|archive|rename)$/;
+
+/** Une commande qui peut faire SORTIR quelque chose de la machine, ou s'installer pour plus tard. */
+export function isEgress(command: string): boolean {
+  /* Du code réseau passé à un interpréteur par un heredoc (`python3 - <<EOF … requests.post … EOF`). */
+  if (heredocs(command).bodies.some((b) => INTERPRETERS.has(b.program) && NETWORK_CODE.test(b.body))) return true;
+  return splitCommands(command).some((part) => {
+    const [cmd, ...args] = program(words(part));
+    const base = cmd?.split("/").pop() ?? "";
+    if (NETWORK.has(base)) return true;
+    if (base === "rsync") return args.some((a) => /^[^/\s]+:/.test(a) || a.startsWith("rsync://"));
+    if (base === "openssl") return ["s_client", "s_time"].includes(args[0] ?? "");
+    if (base === "git") {
+      const sub = gitSubcommand(args);
+      return ["push", "send-email", "request-pull"].includes(sub[0] ?? "") || (sub[0] === "remote" && ["add", "set-url"].includes(sub[1] ?? ""));
+    }
+    if (base === "gh") return ["release", "gist", "secret", "api"].includes(args[0] ?? "") || args.slice(1, 3).some((a) => GH_WRITES.test(a));
+    if (["npm", "pnpm", "yarn", "bun"].includes(base)) return args[0] === "publish";
+    if (base === "docker" || base === "podman") return args[0] === "push" || args[0] === "login";
+    if (base === "aws" || base === "gsutil" || base === "rclone") return args.some((a) => /^(s3|gs|[a-z0-9_-]+):\/\//i.test(a) || /^[a-z0-9_-]+:/i.test(a));
+    if (INTERPRETERS.has(base)) return args.some((a) => NETWORK_CODE.test(a));
+    return false;
+  });
+}
+
+/** Un fichier qui agira plus tard, ailleurs : un workflow de CI, un hook git. */
+function persistent(absolute: string): boolean {
+  return /[\\/]\.github[\\/]workflows[\\/]/.test(absolute) || /[\\/]\.git[\\/]hooks[\\/]/.test(absolute) || /[\\/]\.husky[\\/]/.test(absolute);
+}
+
+function taintReason(taint: Taint, what: string): string {
+  return `${PREFIX}: this session read untrusted content (${taint.source}, at ${taint.at.slice(11, 16)} UTC), which may contain instructions written by someone else. ${what} needs a person. Allow it?`;
+}
+
+/*
+ * LES LEURRES ET LES SECRETS QUI SORTIRAIENT (décision du 7 novembre).
+ *
+ * Un leurre (`decoys.ts`) est un faux secret qu'aucune tâche honnête n'emploie : sa VALEUR dans une
+ * commande, une écriture ou l'appel d'un outil est refusée, toujours. Le NOM d'un fichier leurre
+ * l'est quand la commande fait sortir quelque chose, ou que la session est à risque : le lire seul
+ * ne nuit à rien (il est faux), et la doc d'Oathrion le nomme.
+ *
+ * Dans une session à risque, ce qui sort dit précisément CE qui sortirait : un jeton GitHub, le
+ * contenu de `~/.ssh`. Le web et les outils MCP sont jugés aussi, mais seulement quand ils portent
+ * un secret reconnaissable ou un leurre : le reste passe sans rien coûter.
+ */
+const SENSITIVE_PATH = /(?:^|[\s'"=:/@<])(\.env(?:\.[\w.-]+)?|\.ssh\/[\w.-]*|id_(?:rsa|ed25519|ecdsa|dsa)\b|\.aws\/[\w.-]*|\.netrc|\.npmrc|\.pgpass|\.docker\/config\.json|\.kube\/config)/;
+
+function decoyReason(what: string, taint: Taint | null): string {
+  const read = taint ? ` This session read untrusted content (${taint.source}, at ${taint.at.slice(11, 16)} UTC).` : "";
+  return `${PREFIX} refuses: this carries ${what}, one of the decoys planted by « oathrion decoys ». No honest task uses it: your agent was most likely tricked by something it read.${read} Look at what it read before going on.`;
+}
+
+/** Ce qui sortirait, dit en clair : « with a GitHub token in it », « with the content of .ssh/id_rsa ». */
+function leaving(text: string): string {
+  const kinds = findSecrets(text);
+  const path = SENSITIVE_PATH.exec(text)?.[1];
+  const parts = [kinds.length > 0 ? `${kinds.join(", ")} in it` : null, path ? `${path} in it` : null].filter(Boolean);
+  return parts.length > 0 ? ` (with ${parts.join(", and ")})` : "";
+}
+
+function describeTool(call: ToolCall): string {
+  if (call.tool === "WebFetch") return `WebFetch ${String(call.input.url ?? "")}`;
+  if (call.tool === "WebSearch") return `WebSearch ${String(call.input.query ?? "")}`;
+  const mcp = /^mcp__(.+?)__(.+)$/.exec(call.tool);
+  return `${mcp ? `${mcp[1]!} ${mcp[2]!}` : call.tool} ${JSON.stringify(call.input)}`;
+}
+
+/**
+ * Juge un appel d'outil intégré. Un outil non gouverné n'est pas jugé (`null`).
+ * Le web et les outils MCP ne le sont que s'ils portent un secret ou un leurre.
+ */
+export function judge(call: ToolCall, ctx: RuleContext): Judgement | null {
+  const tainted = ctx.taint && !ctx.disabled?.has("tainted-session") ? ctx.taint : null;
+  /* Le jeton d'un serveur protégé, employé hors de ce serveur : un contournement d'Oathrion. */
+  const stolenText = call.tool === "Bash" && typeof call.input.command === "string" ? call.input.command : JSON.stringify(call.input);
+  const stolen = ctx.disabled?.has("server-token") ? null : guardedTokenIn(stolenText, ctx.guarded);
+  if (call.tool === "Bash") {
+    const command = typeof call.input.command === "string" ? call.input.command : "";
+    let found = judgeShell(command, ctx);
+    const egress = isEgress(command);
+    /* Un refus reste un refus ; sinon, ce qui peut sortir demande une personne, et dit pourquoi. */
+    if (tainted && found?.verdict !== "deny" && egress) {
+      found = { verdict: "ask", rule: "tainted-session", reason: taintReason(tainted, `Sending something out now${leaving(command)}`) };
+    }
+    const decoy = !ctx.disabled?.has("decoy") ? carriesDecoy(command, ctx.decoys, egress || tainted !== null) : null;
+    if (decoy) found = { verdict: "deny", rule: "decoy", reason: decoyReason(decoy, tainted) };
+    else if (stolen && found?.verdict !== "deny") found = { verdict: "deny", rule: "server-token", reason: serverTokenReason(stolen) };
+    return {
+      verdict: found?.verdict ?? null,
+      rule: found?.rule ?? null,
+      reason: found?.reason ?? null,
+      action: "claude.shell",
+      target: `shell://${resolve(ctx.projectDir)}`,
+      ...(found?.deleting ? { deleting: found.deleting } : {}),
+    };
+  }
+  if ((GOVERNED_TOOLS as readonly string[]).includes(call.tool)) {
+    const raw = call.input.file_path ?? call.input.notebook_path;
+    const filePath = typeof raw === "string" && raw !== "" ? raw : "";
+    if (filePath === "") return { verdict: null, rule: null, reason: null, action: "claude.file.write", target: "file://" };
+    const absolute = resolve(ctx.projectDir, expandHome(filePath, ctx.home));
+    let found = judgeWrite(call.tool, filePath, ctx);
+    if (tainted && found?.verdict !== "deny" && persistent(absolute)) {
+      found = { verdict: "ask", rule: "tainted-session", reason: taintReason(tainted, "Changing a file that runs later (CI, git hooks)") };
+    }
+    /* La valeur d'un leurre dans ce qui est écrit, ou le fichier leurre lui-même. */
+    const name = absolute.split(/[\\/]/).pop() ?? "";
+    const decoy = ctx.disabled?.has("decoy") ? null : (carriesDecoy(JSON.stringify(call.input), ctx.decoys, false) ?? (ctx.decoys?.names.includes(name) && under(absolute, ctx.home) ? `the decoy file ${name}` : null));
+    if (decoy) found = { verdict: "deny", rule: "decoy", reason: decoyReason(decoy, tainted) };
+    else if (stolen && found?.verdict !== "deny") found = { verdict: "deny", rule: "server-token", reason: serverTokenReason(stolen) };
+    return { verdict: found?.verdict ?? null, rule: found?.rule ?? null, reason: found?.reason ?? null, action: "claude.file.write", target: `file://${absolute}` };
+  }
+  if (call.tool === "WebFetch" || call.tool === "WebSearch" || call.tool.startsWith("mcp__")) {
+    const text = describeTool(call);
+    const decoy = ctx.disabled?.has("decoy") ? null : carriesDecoy(text, ctx.decoys, true);
+    const secrets = findSecrets(text);
+    if (!decoy && !stolen && secrets.length === 0) return null;
+    const judged = { action: "claude.tool" as const, target: `tool://${call.tool}`, description: redactSecrets(text).slice(0, 1_000) };
+    if (decoy) return { ...judged, verdict: "deny", rule: "decoy", reason: decoyReason(decoy, tainted) };
+    if (stolen) return { ...judged, verdict: "deny", rule: "server-token", reason: serverTokenReason(stolen) };
+    if (tainted) return { ...judged, verdict: "ask", rule: "tainted-session", reason: taintReason(tainted, `Sending ${secrets.join(", ")} through ${call.tool.startsWith("mcp__") ? text.split(" ").slice(0, 2).join(" ") : call.tool}`) };
+    return { ...judged, verdict: null, rule: null, reason: null };
+  }
+  return null;
+}

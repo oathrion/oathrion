@@ -1,0 +1,70 @@
+node_modules/
+dist/
+.vite/
+
+# Fichiers SQLite — ne jamais committer : exposerait les données au repos,
+# journal d'audit compris.
+data.db
+data.db-wal
+data.db-shm
+data.db-journal
+
+# Secrets d'environnement. `.env.example` est la seule exception : c'est le
+# gabarit versionné, et il ne contient aucune valeur réelle.
+.env
+.env.*
+!.env.example
+
+# Sauvegardes de script/mutation-audit.ts. Présentes uniquement pendant un audit
+# et pendant une récupération après interruption ; jamais dans un commit.
+.mutation-backup/
+
+*.log
+.DS_Store
+
+# Archives produites par `npm run package` (reconstructibles depuis un commit).
+release/
+
+# Python build artifacts.
+#
+# Six .pyc files were committed in Phase 8 (H) by a `git add -A` on a tree where
+# the Python SDK's tests had just been run. Compiled bytecode is
+# machine-specific, changes on every run for no source reason, and would have
+# shipped inside the release ZIP. It also broke the mutation harness, which
+# reverts with `git checkout --` and then verifies the tree is clean: a tracked
+# .pyc rewritten by the test run made a correct revert look like a failed one.
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Deployment kit: the filled environment file holds real secrets. Only the
+# template (deploy/placet.env
+# Idem pour la pile pilote locale : `pilot:up` génère ce fichier avec des secrets
+# frais, en mode 600. Il ne doit jamais être versionné ni livré.
+deploy/placet.local.env.example) is versioned.
+deploy/placet.env
+# Idem pour la pile pilote locale : `pilot:up` génère ce fichier avec des secrets
+# frais, en mode 600. Il ne doit jamais être versionné ni livré.
+deploy/placet.local.env
+*.dump
+*.dump.sha256
+
+# Fichiers locaux ecartes pendant une intervention, jamais versionnes.
+#
+# `data.db` et ses journaux d'aout 2026 y ont ete deplaces plutot que supprimes :
+# `e2e:multitenant` verifie qu'AUCUN fichier SQLite n'existe apres un run du bundle de
+# production, et un fichier laisse par un ancien developpement faisait echouer cette
+# garde pour une raison qui n'etait pas celle qu'elle mesure. Le suffixe de date les
+# sort des motifs ci-dessus, donc ce repertoire doit etre ignore explicitement : il
+# contient des donnees de developpement, journal d'audit compris.
+.local-backup/
+
+# Page d'annonce a enregistrer a l'ecran. Ni du code livre, ni du contenu de depot.
+.local-annonce/
+
+# Resultats de passes du kit de conformite : reconstruits a chaque execution.
+conformance/.runs/
+conformance/last-run.json
+dist-npm/
+dist-public/

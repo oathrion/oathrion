@@ -1,0 +1,35 @@
+name: "Oathrion — no receipt, no merge"
+description: "Checks the Oathrion receipt of a pull request: what an AI agent did on the branch, signed, verified offline."
+author: "Oathrion"
+branding:
+  icon: "shield"
+  color: "purple"
+inputs:
+  path:
+    description: "Where the receipts are, in the repository."
+    default: ".oathrion/receipts"
+  require:
+    description: "Fail when the pull request has no receipt at all."
+    default: "false"
+  trusted-fingerprints:
+    description: "Fingerprints allowed to sign receipts, comma-separated. Empty: any valid signature, reported as not pinned."
+    default: ""
+  oathrion-version:
+    description: "The oathrion package to verify with."
+    default: "latest"
+runs:
+  using: "composite"
+  steps:
+    - name: "Verify the Oathrion receipt"
+      shell: bash
+      # Inputs go through the environment, never into the script itself.
+      env:
+        OATHRION_RECEIPTS_PATH: ${{ inputs.path }}
+        OATHRION_REQUIRE: ${{ inputs.require }}
+        OATHRION_TRUSTED_FINGERPRINTS: ${{ inputs.trusted-fingerprints }}
+        OATHRION_VERSION: ${{ inputs.oathrion-version }}
+      run: |
+        set -euo pipefail
+        args=(receipt verify "$OATHRION_RECEIPTS_PATH" --github)
+        if [ "$OATHRION_REQUIRE" = "true" ]; then args+=(--require); fi
+        npx --yes "oathrion@${OATHRION_VERSION}" "${args[@]}"

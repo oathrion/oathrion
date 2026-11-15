@@ -1,0 +1,22 @@
+# No receipt, no merge: a pull request an AI agent worked on carries its Oathrion receipt.
+# Make the « Oathrion » check required in the branch protection rules.
+name: Oathrion
+on: pull_request
+permissions:
+  contents: read
+jobs:
+  receipt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify the Oathrion receipt
+        env:
+          # The fingerprints allowed to sign; `oathrion receipt bundle` prints yours.
+          OATHRION_TRUSTED_FINGERPRINTS: ""
+        run: npx --yes oathrion@0.1.0-preview.1 receipt verify .oathrion/receipts --github --require

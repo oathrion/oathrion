@@ -1,0 +1,7 @@
+# Blank issues stay possible, but the templates come first. A vulnerability never belongs in a
+# public issue: the link below sends it to SECURITY.md.
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/oathrion/oathrion/blob/main/SECURITY.md
+    about: Please do not open a public issue for a vulnerability. Follow SECURITY.md.

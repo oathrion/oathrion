@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oathrion"
+# PEP 440 : « 0.1.0-preview.0 » se lirait comme une version candidate (0.1.0rc0). La préversion
+# est donc une alpha, 0.1.0a0 — la même que le produit, dans la notation de Python.
+version = "0.1.0a1"
+description = "Runtime authorization for AI agents — Python client for Oathrion."
+readme = "README.md"
+requires-python = ">=3.9"
+# MIT, like the rest of `sdk/` (sdk/LICENSE). It said "Proprietary" until 28 October 2026,
+# which contradicted the license decision of 27 October.
+license = { text = "MIT" }
+
+# NO RUNTIME DEPENDENCIES, deliberately. The client uses urllib from the
+# standard library rather than `requests`. An authorization client is the last
+# place you want a dependency tree, and this way `pip install` cannot fail on a
+# machine that is about to start making security decisions.
+dependencies = []
+
+[project.optional-dependencies]
+# Tests use `unittest` from the standard library, so this stays empty too.
+dev = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+# `oathrion` is the package; `placet` is the deprecated alias kept for existing code.
+include = ["oathrion*", "placet*"]

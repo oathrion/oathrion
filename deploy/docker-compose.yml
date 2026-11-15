@@ -1,0 +1,90 @@
+# Oathrion — single-host production stack: PostgreSQL + Oathrion + TLS reverse proxy (Caddy).
+#
+#   cp placet.env.example placet.env      # then fill it (scripts/generate-secrets.sh)
+#   docker compose --env-file placet.env up -d --build
+#
+# Nothing secret is written in this file: every secret comes from placet.env, which is
+# git-ignored and must never be committed or shipped. PostgreSQL is NOT published on
+# the host; only the proxy listens publicly (80 → redirect, 443 → TLS).
+name: placet
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: placet
+      POSTGRES_USER: placet
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in placet.env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U placet -d placet"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # One-shot: applies pending migrations BEFORE the server starts. Oathrion refuses to
+  # boot on an unmigrated or newer schema; this is the step that prepares it.
+  migrate:
+    image: placet:local
+    build:
+      context: ..
+    command: ["node", "dist/migrate.cjs"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://placet:${POSTGRES_PASSWORD}@postgres:5432/placet
+    read_only: true
+
+  placet:
+    image: placet:local
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    env_file: placet.env
+    environment:
+      NODE_ENV: production
+      PORT: "5000"
+      # Écoute sur l'interface du réseau Compose, pour que Caddy l'atteigne. Le port 5000
+      # n'est PAS publié sur l'hôte (`expose`, pas `ports`) : seul le proxy y accède.
+      OATHRION_HOST: "0.0.0.0"
+      # Every plane on PostgreSQL. The server refuses to start otherwise.
+      DATABASE_DRIVER: postgres
+      DATABASE_URL: postgres://placet:${POSTGRES_PASSWORD}@postgres:5432/placet
+      OATHRION_IDENTITY_PLANE: postgres
+      OATHRION_ACTION_AUTHORITY_DRIVER: postgres
+      RATE_LIMIT_STORE: postgres
+      # Exactly one proxy (Caddy) in front: client IPs come from X-Forwarded-For.
+      OATHRION_TRUST_PROXY: "1"
+    expose:
+      - "5000"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - placet
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # `PLACET_DOMAIN` (nom d'avant le renommage) reste lu si `OATHRION_DOMAIN` est absent.
+      OATHRION_DOMAIN: ${OATHRION_DOMAIN:-${PLACET_DOMAIN:?set OATHRION_DOMAIN in placet.env}}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

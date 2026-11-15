@@ -1,0 +1,8 @@
+Oathrion
+Copyright 2026 Abdoulaye Diallo
+
+Ce produit est distribué sous la licence Apache, version 2.0 (voir LICENSE), à
+l'exception des répertoires suivants, chacun sous licence MIT (voir le fichier
+LICENSE de chaque répertoire) : sdk/, cli/, examples/, conformance/.
+
+Anciennement publié sous les noms Placet et ARIA.

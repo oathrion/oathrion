@@ -1,0 +1,429 @@
+# Oathrion — continuous integration.
+#
+# Every step below runs a command that already exists in package.json and that has been
+# executed by hand against this commit. Nothing here is aspirational: no step invokes a
+# script that does not exist, and no step is allowed to fail softly.
+#
+# ## Nothing is deployed
+#
+# There is no deploy job, no registry push, no cloud credential and no environment
+# reference. The repository contains no deployment configuration, so inventing one here
+# would produce a pipeline that either fails on a missing secret or, worse, pushes an
+# artefact somewhere nobody chose. The Docker image is BUILT to prove the Dockerfile is
+# valid; it is never published.
+#
+# ## Why the jobs are split the way they are
+#
+# `quality` is fast and needs no services. `postgres` needs a database and is slower.
+# Splitting them means a type error is reported in about a minute instead of waiting behind
+# a database boot, and the two run in parallel. `docker` depends on both, because building
+# an image from a commit that does not typecheck wastes several minutes to produce
+# something nobody should run.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to the same branch cancels the previous run: an obsolete result is not worth
+# a runner. `cancel-in-progress` is deliberately NOT applied to the default branch below,
+# where every commit's result is a record worth keeping.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # The lowest major engines.node (">=22.0.0") allows. Pinned to a major so a new Node
+  # release does not change the build without anyone choosing it. Node 20 reached end of
+  # life in April 2026; the `quality` job also runs on 24, the current LTS.
+  NODE_VERSION: "22"
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  quality:
+    name: Typecheck, lint, tests, build (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # The supported floor and the current LTS. `oathrion wrap` is installed by developers on
+    # whatever Node they have, so both ends are worth a red build.
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22", "24"]
+
+    # Needed by `smoke` and `e2e`, which boot the shipped bundle with NODE_ENV=production.
+    # Since Phase 12.2 that requires PostgreSQL on every plane and no variable opts out, so
+    # those two harnesses create a throwaway database here instead of a temporary SQLite
+    # file. `npm test` and `chaos` do not use it.
+    services:
+      postgres:
+        # Pinned to a major, for the reason given in the postgres job below.
+        image: postgres:17
+        env:
+          # Throwaway, reachable only from this job. See the note in the postgres job.
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          # Caches ~/.npm keyed on package-lock.json. Safe with `npm ci` because the
+          # lockfile fully determines the tree.
+          cache: npm
+
+      # `npm ci`, never `npm install`: it installs exactly the lockfile and fails if the
+      # lockfile and manifest disagree. A CI run that silently resolves a newer transitive
+      # dependency is testing a tree that no developer has.
+      - name: Install dependencies
+        run: npm ci
+
+      # Run as separate steps rather than the single `npm run verify` script, even though
+      # verify chains the same four commands. The reason is diagnosis: verify stops at the
+      # first failure and the log shows one wall of output, whereas separate steps name
+      # the failing stage in the run summary.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # BEFORE the tests, since 28 October 2026: the `oathrion wrap` end-to-end tests
+      # (`cli/wrap/wrap.test.ts`) drive the compiled local server, and skip — loudly, but
+      # skip — when `dist/oathrion-local.cjs` is absent. Built after the tests, they never ran
+      # here.
+      - name: Build
+        run: npm run build
+
+      - name: Unit and integration tests
+        run: npm test
+
+      # The npm package of `oathrion wrap`, assembled exactly as it would be published — and
+      # NOT published: `npm pack` writes a local tarball, and there is no registry credential
+      # in this workflow. It fails if the local server needs a runtime dependency the package
+      # does not declare. `--brouillon`: the contact address and the public repository are
+      # filled in only for a package that is really published (`--contact`, `--repo`).
+      - name: Assemble the oathrion npm package
+        run: npm run pack:oathrion -- --brouillon
+
+      # `smoke` boots the real server and exercises it over HTTP; `e2e` runs the
+      # enterprise scenario. Both are in package.json and both exit non-zero on failure.
+      # DATABASE_URL points at the service's admin database: each script creates and drops
+      # its own database for the run, so the two cannot see each other's state.
+      - name: Smoke test
+        run: npm run smoke
+        env:
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+
+      - name: End-to-end scenario
+        run: npm run e2e
+        env:
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+
+      # The chaos bench asserts that failures are handled and reports whether it actually
+      # ran — a previous commit made it possible for it to "pass" without executing, which
+      # is why it is here as its own step.
+      - name: Chaos bench
+        run: npm run chaos
+
+      - name: Upload build output
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-node${{ matrix.node }}
+          path: dist
+          retention-days: 7
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # A visitor's journey on a fresh account, on the three systems developers use. Before
+  # 12 November 2026 nobody had run Oathrion on a Mac or on Windows: the `quality` job is
+  # Linux only, and most of the people who will read the announcement are on macOS.
+  #
+  # The package is assembled exactly as it would be published, then `script/visitor-smoke.mjs`
+  # installs it in an empty home directory (HOME, USERPROFILE and APPDATA redirected),
+  # protects a Cursor MCP server, starts the console and checks it answers, and undoes
+  # everything. What it cannot see is what appears on a screen (the notification, the sound,
+  # the decision page): these runners have none.
+  visitor:
+    name: A visitor's journey (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Assemble the oathrion npm package
+        run: npm run pack:oathrion -- --brouillon
+
+      - name: Install, protect, open the console, undo
+        run: node script/visitor-smoke.mjs
+
+  # ───────────────────────────────────────────────────────────────────────────
+  postgres:
+    name: PostgreSQL migrations, smoke and multi-instance
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        # Pinned to a major, AND to the SAME major as deploy/docker-compose.yml.
+        #
+        # `postgres:latest` would change the database under the test suite without a
+        # commit — that is why it is pinned. But the value matters as much as the pin:
+        # this was 16 while the shipped compose ran 17, so every green CI run was a green
+        # run on a different major from the one that will actually serve.
+        #
+        # The cost is not theoretical. `pg_dump` and `pg_restore` are forward-compatible
+        # ONLY: an archive written by 17 cannot be restored on 16, with
+        # `pg_restore: error: unsupported version (1.16) in file header`. The
+        # disaster-recovery bench hit exactly that, because it too had drifted to 16 —
+        # and it is the one bench whose failure you discover on the day you have nothing
+        # left but the backup.
+        #
+        # `postgres-version-parity.test.ts` now fails if this line and the compose file
+        # disagree, so the next bump cannot leave one of them behind.
+        image: postgres:17
+        env:
+          # A throwaway password for an ephemeral container that exists for one job and is
+          # reachable only from it. This is not a secret and must not be read as a pattern
+          # for anything outside CI — application secrets come from the environment via
+          # SecretProvider and are never written into a workflow file.
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        # Without this, the job starts before the database accepts connections and the
+        # first step fails on a race rather than on a real defect.
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    # Ces valeurs sont propres à la CI, jetables, et volontairement DIFFÉRENTES de
+    # tout identifiant ayant existé ailleurs. Elles utilisent le domaine réservé
+    # `.invalid` (RFC 2606) pour qu'aucune ne puisse ressembler à un compte réel, et
+    # elles portent le préfixe `ci-only-` pour qu'un lecteur qui les retrouve dans un
+    # journal sache immédiatement qu'elles n'ouvrent rien. Un identifiant de CI qui
+    # ressemble à un identifiant de production finit par être réutilisé comme tel.
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+      OATHRION_TEST_IDENTITY_PG_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+      OATHRION_SESSION_SECRET: ci-only-session-secret-0123456789abcdef0123456789
+      OATHRION_CONSOLE_USERS: ci-admin@placet.invalid:admin:ci-only-admin-Rt8Qw2Lm5Xz,ci-viewer@placet.invalid:viewer:ci-only-viewer-Rt8Qw2Lm5Xz
+      OATHRION_API_KEYS: CI Runner:operator:oathrion_ci_key_0123456789abcdef
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Applies the migrations to a real server. This is the step that catches a migration
+      # written against SQLite semantics that PostgreSQL rejects.
+      - name: Apply migrations to PostgreSQL
+        run: npm run migrate:postgres
+
+      - name: PostgreSQL smoke test
+        run: npm run smoke:postgres
+
+      # The one that matters most for the target architecture: two real Oathrion processes
+      # against one database, asserting the shared rate limiter holds a single global cap
+      # and that tenants stay isolated. A single-instance test cannot detect a limiter
+      # that silently keeps per-process state.
+      - name: Multi-instance and tenancy
+        run: npm run e2e:instances
+
+      - name: Build identity E2E bundle
+        run: npm run build
+
+      - name: Phase 12 shared identity E2E
+        run: npm run e2e:identity
+
+      - name: Phase 12 multi-process identity regression suite
+        run: npx vitest run server/test/phase12-multiprocess-identity.test.ts
+
+      # The PostgreSQL test files. `npm test` in the `quality` job skips them — loudly, but
+      # 83 tests never ran in CI. `OATHRION_REQUIRE_POSTGRES` turns a skip into a failure, so
+      # a missing database cannot pass for a green run. The restart test is left out: it
+      # stops the database, and a service container cannot be restarted from a step.
+      - name: PostgreSQL test files
+        run: >-
+          npx vitest run --no-file-parallelism
+          server/test/multitenant-authority-postgres.test.ts
+          server/test/pg-client-guard.test.ts
+          server/test/phase10-postgres.test.ts
+          server/test/phase11-multiprocess.test.ts
+          server/test/phase11-postgres-core.test.ts
+          server/test/postgres-connection-loss.test.ts
+          server/test/postgres.test.ts
+          server/test/tenant-quota-config-postgres.test.ts
+          server/test/rate-limit-shared.test.ts
+        env:
+          OATHRION_REQUIRE_POSTGRES: "true"
+          OATHRION_TEST_POSTGRES_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+          OATHRION_TEST_PG_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+
+      # A tenant declared in francs CFA, driven over HTTP. The engine-level currency
+      # tests cannot see a layer that substitutes the euro — a formatter, the gateway, a
+      # connector — and this one found exactly such a gap in the mandate ceiling.
+      - name: Franc CFA tenant end-to-end
+        run: npm run e2e:currency
+
+  # ───────────────────────────────────────────────────────────────────────────
+  docker:
+    name: Build production image
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Both must pass first: an image built from code that does not typecheck is a waste of
+    # several minutes, and a green image would give false confidence.
+    needs: [quality, postgres]
+
+    # The image runs NODE_ENV=production, which since Phase 12.2 means PostgreSQL on every
+    # plane. Booting it therefore needs a real database — the previous SQLite boot is no
+    # longer a configuration Oathrion accepts.
+    services:
+      postgres:
+        # Same major as deploy/docker-compose.yml; see the postgres job above.
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Build only — `push: false`, and no registry login exists in this workflow. The
+      # purpose is to prove the Dockerfile builds and that the native `better-sqlite3`
+      # addon installs inside the image, which is the part most likely to break.
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: placet:ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The schema is applied by an explicit command, never as a side effect of a container
+      # starting — the application checks `schema_migrations` at boot and refuses a database
+      # that is absent or behind. Node is set up only for this step.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies and migrate PostgreSQL
+        run: |
+          npm ci
+          npm run migrate:postgres
+        env:
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+
+      # Booting the image is what turns "it compiled" into "it runs", and it now boots in
+      # the configuration a deployment actually uses: every plane on PostgreSQL.
+      #
+      # `--network host` rather than `-p 5000:5000`: the database is a service container
+      # published on the runner's loopback, and 127.0.0.1 inside a bridged container is the
+      # container itself. Sharing the host network makes both directions work — the app
+      # reaches PostgreSQL, and the probe below reaches the app.
+      - name: Boot the image and probe /api/health
+        run: |
+          set -euo pipefail
+          docker run -d --name placet-ci --network host \
+            -e NODE_ENV=production \
+            -e DATABASE_DRIVER=postgres \
+            -e DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres \
+            -e OATHRION_IDENTITY_PLANE=postgres \
+            -e OATHRION_ACTION_AUTHORITY_DRIVER=postgres \
+            -e RATE_LIMIT_STORE=postgres \
+            -e OATHRION_SESSION_SECRET=ci-only-session-secret-0123456789abcdef0123456789 \
+            -e 'OATHRION_CONSOLE_USERS=ci-admin@placet.invalid:admin:ci-only-admin-Rt8Qw2Lm5Xz' \
+            -e 'OATHRION_API_KEYS=CI Runner:operator:oathrion_ci_key_0123456789abcdef' \
+            placet:ci-${{ github.sha }}
+
+          # Poll rather than sleep: migrations run at boot and their duration is not fixed.
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5000/api/health > /tmp/health.json; then
+              echo "healthy after ${i}s"; cat /tmp/health.json; break
+            fi
+            if [ "$i" = "30" ]; then
+              echo "::error::the container never became healthy"
+              docker logs placet-ci
+              exit 1
+            fi
+            sleep 1
+          done
+
+          # The gateway must reject an unauthenticated call. If this returned 200 the
+          # image would be serving tenant data to anyone, and a green health check would
+          # have hidden it.
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5000/api/agents)
+          test "$code" = "401" || { echo "::error::expected 401 without a credential, got $code"; exit 1; }
+
+          # And accept a valid one, so the check above is proven to be about
+          # authentication rather than a broken route.
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H 'Authorization: Bearer oathrion_ci_key_0123456789abcdef' \
+            http://127.0.0.1:5000/api/agents)
+          test "$code" = "200" || { echo "::error::expected 200 with a valid key, got $code"; docker logs placet-ci; exit 1; }
+
+          # Docker's own view of the HEALTHCHECK, which exercises the directive in the
+          # Dockerfile rather than only the endpoint behind it.
+          test "$(docker inspect -f '{{.State.Health.Status}}' placet-ci)" = "healthy"
+
+          # SIGTERM must drain rather than cut connections. `docker stop` sends SIGTERM and
+          # waits, so a missing drain shows up as the container being killed after the
+          # timeout instead of exiting promptly.
+          docker stop -t 30 placet-ci
+          docker logs placet-ci 2>&1 | grep -q 'drained' \
+            || { echo "::error::the container did not drain on SIGTERM"; docker logs placet-ci; exit 1; }
+
+      - name: Remove the container
+        if: always()
+        run: docker rm -f placet-ci || true

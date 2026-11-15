@@ -1,0 +1,477 @@
+/* ------------------------------------------------------------------- nav */
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  transition: background-color var(--t-base) var(--ease), border-color var(--t-base) var(--ease),
+              backdrop-filter var(--t-base) var(--ease);
+  border-bottom: 1px solid transparent;
+}
+
+/*
+ * Le verre n'apparaît qu'au défilement. En haut de page la barre doit se confondre avec
+ * le Hero — une barre opaque dès le premier pixel coupe la scène en deux et donne
+ * l'impression d'un gabarit posé par-dessus.
+ */
+.nav--scrolled {
+  /*
+   * 0,92 et non 0,72. À 0,72 le texte du Hero traversait la barre en défilant : le flou
+   * l'adoucissait sans le cacher, et une grande typographie passant sous une barre
+   * translucide se lit comme un défaut d'affichage plutôt que comme un effet. Constaté à
+   * l'écran, pas déduit.
+   *
+   * Le flou reste — il donne la matière — mais c'est l'opacité qui garantit la lisibilité,
+   * y compris sur un navigateur qui ne compose pas `backdrop-filter`.
+   */
+  background: rgba(5, 9, 18, 0.92);
+  backdrop-filter: saturate(150%) blur(16px);
+  -webkit-backdrop-filter: saturate(150%) blur(16px);
+  border-bottom-color: var(--line-soft);
+}
+
+.nav__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  height: 64px;
+}
+
+.nav__brand {
+  display: inline-flex; align-items: center; gap: var(--s-3);
+  font-weight: 600; letter-spacing: -0.01em;
+  color: var(--fg);
+}
+.nav__mark { width: 26px; height: 26px; color: var(--flow); flex: none; }
+
+.nav__links { display: none; align-items: center; gap: var(--s-2); margin-inline-start: var(--s-4); }
+@media (min-width: 62rem) { .nav__links { display: flex; } }
+
+.nav__group { position: relative; }
+
+.nav__trigger {
+  display: inline-flex; align-items: center; gap: var(--s-2);
+  font-size: var(--t-small); color: var(--fg-dim);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--radius);
+  transition: color var(--t-fast) var(--ease), background-color var(--t-fast) var(--ease);
+}
+.nav__trigger:hover { color: var(--fg); background: rgba(255,255,255,0.03); }
+.nav__chevron { width: 9px; height: 6px; opacity: 0.6; }
+
+.nav__menu {
+  position: absolute; top: calc(100% + 8px); left: 0;
+  min-width: 17rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: var(--s-2);
+  box-shadow: 0 24px 60px -24px rgba(0,0,0,0.8);
+  display: grid; gap: 2px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .nav__menu { animation: menu-in var(--t-base) var(--ease-out); }
+  @keyframes menu-in { from { opacity: 0; transform: translateY(-5px); } }
+}
+
+.nav__item { display: grid; gap: 2px; padding: var(--s-3); border-radius: var(--radius); transition: background-color var(--t-fast) var(--ease); }
+.nav__item:hover { background: rgba(255,255,255,0.04); }
+.nav__item-label { font-size: var(--t-small); color: var(--fg); font-weight: 500; }
+.nav__item-note { font-size: var(--t-micro); color: var(--fg-faint); }
+
+.nav__actions { display: none; align-items: center; gap: var(--s-3); margin-inline-start: auto; }
+@media (min-width: 62rem) { .nav__actions { display: flex; } }
+.nav__signin { font-size: var(--t-small); }
+
+.nav__burger {
+  margin-inline-start: auto; width: 40px; height: 40px;
+  display: inline-grid; place-items: center;
+  border: 1px solid var(--line); border-radius: var(--radius);
+}
+@media (min-width: 62rem) { .nav__burger { display: none; } }
+.nav__burger span { position: relative; width: 16px; height: 1.5px; background: var(--fg); display: block; transition: background-color var(--t-fast) var(--ease); }
+.nav__burger span::before, .nav__burger span::after {
+  content: ""; position: absolute; left: 0; width: 16px; height: 1.5px; background: var(--fg);
+  transition: transform var(--t-base) var(--ease);
+}
+.nav__burger span::before { top: -5px; }
+.nav__burger span::after { top: 5px; }
+.nav__burger span[data-open="yes"] { background: transparent; }
+.nav__burger span[data-open="yes"]::before { transform: translateY(5px) rotate(45deg); }
+.nav__burger span[data-open="yes"]::after { transform: translateY(-5px) rotate(-45deg); }
+
+.nav__sheet {
+  position: fixed; inset: 64px 0 0; z-index: 49;
+  background: var(--bg);
+  border-top: 1px solid var(--line-soft);
+  padding-block: var(--s-6) var(--s-8);
+  overflow-y: auto;
+}
+.nav__sheet-link {
+  display: grid; gap: 2px;
+  padding-block: var(--s-2);
+  font-size: 1.0625rem; color: var(--fg);
+}
+
+/* ---------------------------------------------------------------- footer */
+
+/* Chaque section porte un filet colore en tete : c'est ce qui empeche quinze sections
+   de se ressembler, sans ajouter un seul element. */
+.section--line { position: relative; }
+.section--line::before {
+  content: "";
+  position: absolute; inset-inline: 0; top: -1px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--flow) 20%, var(--violet) 62%, transparent 88%);
+  opacity: 0.35;
+}
+
+.foot {
+  border-top: 1px solid var(--line-soft);
+  padding-block: var(--s-8) var(--s-6);
+  background: var(--bg-raised);
+}
+
+.foot__top { display: grid; gap: var(--s-7); margin-bottom: var(--s-8); }
+@media (min-width: 62rem) { .foot__top { grid-template-columns: 1fr 2fr; gap: var(--s-8); } }
+
+.foot__cols { display: grid; gap: var(--s-6); grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 46rem) { .foot__cols { grid-template-columns: repeat(4, 1fr); } }
+
+.foot__link { font-size: var(--t-small); color: var(--fg-dim); transition: color var(--t-fast) var(--ease); }
+.foot__link:hover { color: var(--fg); }
+
+.foot__base {
+  display: flex; flex-wrap: wrap; gap: var(--s-3) var(--s-6);
+  justify-content: space-between; padding-top: var(--s-5);
+}
+
+/* --------------------------------------------------------------- content */
+
+/*
+ * Le rythme vertical des pages. Une page est une suite de `Section`, et l'espacement
+ * vient du token `--section-y` — jamais d'une marge posée au cas par cas, qui est la
+ * façon dont deux sections finissent par ne plus respirer pareil.
+ */
+.page-head { display: grid; gap: var(--s-4); margin-bottom: var(--s-7); }
+.page-head .lead { max-width: var(--measure); }
+
+.hero {
+  position: relative;
+  padding-block: clamp(3rem, 7vw, 6rem) clamp(3.5rem, 8vw, 7rem);
+  overflow: hidden;
+}
+.hero__grid { display: grid; gap: var(--s-7); align-items: center; }
+@media (min-width: 64rem) { .hero__grid { grid-template-columns: 1fr 1.05fr; gap: var(--s-8); } }
+
+/* La lueur du Hero : une seule, très large, très faible. Elle donne de la profondeur
+   au fond sans jamais devenir un dégradé décoratif. */
+/*
+ * Les lueurs portaient 0,17 et 0,14 d'opacite : invisibles, donc inutiles. Le fond
+ * paraissait plat et la page éteinte. Elles sont maintenant une vraie aurore — deux
+ * teintes qui se croisent, assez fortes pour se voir, assez diffuses pour ne jamais
+ * concurrencer le texte qui passe par-dessus.
+ */
+.hero__glow {
+  width: 52rem; height: 40rem;
+  top: -18rem; right: -14rem;
+  background: radial-gradient(circle, rgba(77,141,255,0.46), rgba(77,141,255,0.10) 45%, transparent 70%);
+  filter: blur(90px);
+}
+.hero__glow--low {
+  width: 44rem; height: 34rem;
+  bottom: -20rem; left: -12rem;
+  background: radial-gradient(circle, rgba(139,108,255,0.38), rgba(139,108,255,0.08) 48%, transparent 72%);
+  filter: blur(100px);
+}
+
+/* Une troisieme, cyan, tres serree : le point le plus lumineux de la page. */
+.hero__glow--spark {
+  width: 22rem; height: 22rem;
+  top: 2rem; right: 12rem;
+  background: radial-gradient(circle, rgba(63,224,240,0.20), transparent 62%);
+  filter: blur(70px);
+}
+
+.stat-row {
+  display: grid; gap: var(--s-5);
+  grid-template-columns: repeat(2, 1fr);
+}
+@media (min-width: 52rem) { .stat-row { grid-template-columns: repeat(4, 1fr); } }
+.stat { display: grid; gap: var(--s-1); }
+.stat__n { font-family: var(--font-mono); font-size: clamp(1.5rem, 2.6vw, 2rem); font-weight: 500; letter-spacing: -0.02em; color: var(--fg); font-variant-numeric: tabular-nums; }
+.stat__l { font-size: var(--t-micro); color: var(--fg-faint); line-height: 1.4; }
+
+/* Une carte de contenu. Discrète : le fond la distingue, pas une ombre. */
+.card {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: var(--s-5);
+  display: grid; gap: var(--s-3);
+  align-content: start;
+  transition: border-color var(--t-base) var(--ease), background-color var(--t-base) var(--ease);
+}
+.card--link:hover { border-color: var(--line-strong); background: var(--bg-elevated); }
+.card__icon { width: 34px; height: 34px; color: var(--flow); }
+
+/*
+ * La puce est POSÉE, pas placée dans une grille.
+ *
+ * `li` était une grille `auto 1fr` : elle ne tient que si l'élément a exactement deux
+ * enfants — la puce et un seul bloc. Dès qu'une phrase mélange un `<strong>` et du texte
+ * nu, cela fait TROIS éléments de grille : le texte nu part à la ligne suivante, sous la
+ * puce, et la phrase se casse en deux morceaux désalignés. C'est ce qui arrivait aux
+ * trois promesses de `/waitlist`, et cela serait arrivé à la prochaine liste écrite avec
+ * un mot en gras dedans.
+ *
+ * En retrait plus puce absolue, le `li` redevient du texte ordinaire : il accepte
+ * n'importe quel mélange d'éléments en ligne, et la puce reste alignée sur la première
+ * ligne quelle que soit la hauteur du paragraphe.
+ */
+.list { display: grid; gap: var(--s-3); }
+.list li {
+  position: relative;
+  padding-left: calc(5px + var(--s-3));
+  font-size: var(--t-small);
+  color: var(--fg-dim);
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+.list li::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0.62em;
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--flow);
+}
+
+.code {
+  background: var(--bg-inset);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.code__bar {
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--line-soft);
+  font-family: var(--font-mono); font-size: var(--t-micro); color: var(--fg-faint);
+}
+.code pre {
+  margin: 0; padding: var(--s-4);
+  overflow-x: auto;
+  font-family: var(--font-mono); font-size: 0.8125rem; line-height: 1.75;
+  color: var(--fg-dim);
+}
+.code .k { color: var(--flow-bright); }
+.code .s { color: var(--allow); }
+.code .c { color: var(--fg-faint); }
+
+/* ------------------------------------------------------------------ table */
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-lg); }
+table.data { width: 100%; border-collapse: collapse; font-size: var(--t-small); min-width: 40rem; }
+table.data th {
+  text-align: left; font-family: var(--font-mono); font-weight: 500;
+  font-size: var(--t-label); letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--fg-faint); padding: var(--s-4); border-bottom: 1px solid var(--line);
+  white-space: nowrap; background: var(--bg-inset);
+}
+table.data td { padding: var(--s-4); border-bottom: 1px solid var(--line-soft); vertical-align: top; color: var(--fg-dim); }
+table.data tr:last-child td { border-bottom: 0; }
+table.data td.mono { color: var(--fg); white-space: nowrap; }
+table.data td.ok { color: var(--allow); white-space: nowrap; }
+table.data td.part { color: var(--hold); white-space: nowrap; }
+
+/* -------------------------------------------------------------- lifecycle */
+
+/*
+ * Les huit contrôles. Numérotés, parce qu'ici l'ordre EST l'information : chacun
+ * s'applique après le précédent et peut refuser seul. Une numérotation qui
+ * n'encoderait pas une séquence réelle serait de la décoration.
+ */
+.lifecycle { display: grid; gap: 1px; background: var(--line-soft); border: 1px solid var(--line-soft); border-radius: var(--radius-lg); overflow: hidden; }
+@media (min-width: 52rem) { .lifecycle { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 76rem) { .lifecycle { grid-template-columns: repeat(4, 1fr); } }
+
+.lifecycle__item {
+  background: var(--bg-raised);
+  padding: var(--s-5);
+  display: grid; gap: var(--s-3);
+  align-content: start;
+  height: 100%;
+  transition: background-color var(--t-base) var(--ease);
+}
+.lifecycle li:hover .lifecycle__item { background: var(--bg-elevated); }
+.lifecycle__n { font-size: var(--t-micro); color: var(--flow); letter-spacing: 0.1em; }
+
+/* ----------------------------------------------------------------- limits */
+
+.limit-item { border-top: 1px solid var(--line); padding-top: var(--s-4); display: grid; gap: var(--s-2); }
+
+/* ------------------------------------------------------------------ doors */
+
+.doors { align-items: stretch; }
+.door {
+  height: 100%;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  display: grid; gap: var(--s-3); align-content: start;
+}
+.door--now {
+  background:
+    radial-gradient(120% 90% at 0% 0%, rgba(77,141,255,0.10), transparent 62%),
+    var(--bg-elevated);
+  border-color: var(--line-strong);
+}
+
+/* ------------------------------------------------------------------ forms */
+
+.form { display: grid; gap: var(--s-5); }
+.form__row { display: grid; gap: var(--s-4); }
+@media (min-width: 46rem) { .form__row--2 { grid-template-columns: repeat(2, 1fr); } }
+
+/* Le piège à robots. Hors flux et hors lecture d'écran, jamais `display:none` —
+   certains scripts ignorent précisément les champs masqués de cette façon. */
+.trap {
+  position: absolute !important;
+  left: -9999px; top: auto;
+  width: 1px; height: 1px; overflow: hidden;
+}
+
+.form__status { display: grid; gap: var(--s-2); padding: var(--s-4); border-radius: var(--radius); font-size: var(--t-small); }
+.form__status--error { background: rgba(255,107,122,0.08); border: 1px solid rgba(255,107,122,0.3); color: var(--block); }
+.form__status--ok { background: rgba(53,214,160,0.08); border: 1px solid rgba(53,214,160,0.3); color: var(--allow); }
+
+.success { display: grid; gap: var(--s-4); place-items: start; }
+.success__mark { width: 48px; height: 48px; color: var(--allow); }
+
+/* ------------------------------------------------------------------- 404 */
+
+.fourohfour { min-height: 68vh; display: grid; place-items: center; text-align: center; position: relative; overflow: hidden; }
+.fourohfour__n {
+  font-family: var(--font-mono);
+  font-size: clamp(5rem, 18vw, 11rem);
+  font-weight: 500; letter-spacing: -0.05em; line-height: 1;
+  color: transparent;
+  -webkit-text-stroke: 1px var(--line-strong);
+}
+
+/* ------------------------------------------------------------------ steps */
+
+.steps { display: grid; gap: 1px; background: var(--line-soft); border: 1px solid var(--line-soft); border-radius: var(--radius-lg); overflow: hidden; }
+.step {
+  background: var(--bg-raised);
+  padding: var(--s-5);
+  display: grid; grid-template-columns: auto 1fr; gap: var(--s-5);
+  align-items: start;
+  transition: background-color var(--t-base) var(--ease);
+}
+.steps li:hover .step { background: var(--bg-elevated); }
+.step__n { font-size: var(--t-small); color: var(--flow); letter-spacing: 0.08em; padding-top: 0.15em; }
+@media (max-width: 40rem) { .step { grid-template-columns: 1fr; gap: var(--s-3); } }
+
+/* ------------------------------------------------------------- les fonds */
+
+/*
+ * Une image de fond, et les trois règles qui l'empêchent de nuire.
+ *
+ * 1. ELLE EST DERRIÈRE, jamais à côté : `position: absolute`, `z-index: 0`, et le
+ *    contenu passe au-dessus avec `.rel`. Une image qui occupe sa propre colonne
+ *    oblige à écrire autour d'elle ; une image de fond donne de la profondeur sans
+ *    reprendre la mise en page.
+ * 2. ELLE EST SOMBRE ET EFFACÉE. Opacité basse plus un voile qui va du fond
+ *    transparent au fond plein : le texte garde son contraste quelle que soit la
+ *    zone de l'image qui passe dessous. Sans ce voile, un titre blanc tombe tôt ou
+ *    tard sur une partie claire et devient illisible.
+ * 3. ELLE NE DÉCALE RIEN. `pointer-events: none` et aucune contribution à la
+ *    hauteur : si elle ne charge pas, la page est identique en tout point.
+ */
+.backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.backdrop img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  opacity: 0.62;
+  /* Le découpage : l'image existe en haut à droite et s'éteint partout ailleurs. */
+  -webkit-mask-image: radial-gradient(125% 105% at 76% 16%, #000 14%, transparent 74%);
+  mask-image: radial-gradient(125% 105% at 76% 16%, #000 14%, transparent 74%);
+}
+
+/*
+ * Le voile est DIRECTIONNEL, et c'est la seule chose qui rend une photographie de fond
+ * utilisable sur une page de texte.
+ *
+ * Un voile uniforme a deux défauts à la fois : il doit être assez opaque pour protéger
+ * le texte le plus exposé, ce qui éteint l'image partout, et il laisse quand même le
+ * contraste varier selon ce qui passe dessous. En le faisant plein du côté où le texte
+ * vit et ouvert du côté qui est vide, le texte garde un fond constant et l'image garde
+ * sa matière. La deuxième couche ferme le bas vers la section suivante, pour qu'aucune
+ * arête ne trahisse le bord du fichier.
+ */
+.backdrop::after {
+  content: "";
+  position: absolute; inset: 0;
+  background:
+    linear-gradient(97deg, var(--bg) 4%, rgba(3,6,13,0.86) 34%, rgba(3,6,13,0.30) 76%, rgba(3,6,13,0.18) 100%),
+    linear-gradient(180deg, rgba(3,6,13,0.35) 0%, transparent 26%, transparent 64%, var(--bg) 100%);
+}
+
+/* Variantes : de quel côté l'image vit — et le voile suit, toujours à l'opposé. */
+.backdrop--left img {
+  -webkit-mask-image: radial-gradient(120% 105% at 22% 26%, #000 12%, transparent 72%);
+  mask-image: radial-gradient(120% 105% at 22% 26%, #000 12%, transparent 72%);
+}
+.backdrop--left::after {
+  background:
+    linear-gradient(263deg, var(--bg) 4%, rgba(3,6,13,0.86) 34%, rgba(3,6,13,0.30) 76%, rgba(3,6,13,0.18) 100%),
+    linear-gradient(180deg, rgba(3,6,13,0.35) 0%, transparent 26%, transparent 64%, var(--bg) 100%);
+}
+
+/* En bandeau : l'image traverse toute la largeur, et c'est la hauteur qui l'éteint. */
+.backdrop--wide img {
+  opacity: 0.38;
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 30%, #000 64%, transparent);
+  mask-image: linear-gradient(180deg, transparent, #000 30%, #000 64%, transparent);
+}
+.backdrop--wide::after {
+  background:
+    linear-gradient(90deg, var(--bg) 0%, rgba(3,6,13,0.55) 26%, rgba(3,6,13,0.55) 74%, var(--bg) 100%),
+    linear-gradient(180deg, var(--bg) 0%, transparent 22%, transparent 70%, var(--bg) 100%);
+}
+
+/* Discrète : derrière une scène qui porte déjà le regard, elle n'est que de l'air. */
+.backdrop--soft img { opacity: 0.34; }
+
+/* Une section qui porte un fond doit le découper à ses propres bords. */
+.section--bg { overflow: hidden; isolation: isolate; }
+
+/* ------------------------------------------------------------- les figures */
+
+/*
+ * Une figure, par opposition à un fond.
+ *
+ * `.backdrop` passe derrière le contenu et peut disparaître sans rien coûter. Une figure
+ * PORTE de l'information — ici des noms de contrôles écrits dans l'image — donc elle est
+ * encadrée, pleine opacité, jamais voilée, et son `alt` répète ce qu'elle dit. Confondre
+ * les deux produit soit un fond illisible, soit un schéma noyé.
+ */
+.figure { display: grid; gap: var(--s-4); }
+.figure__frame {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-inset);
+  /* L'image est très sombre : sans cette lueur, son cadre se perd dans la page. */
+  box-shadow: 0 0 0 1px rgba(77,141,255,0.06), 0 24px 70px -40px rgba(77,141,255,0.45);
+}
+.figure__frame img { display: block; width: 100%; height: auto; }
+.figure__caption { font-size: var(--t-small); color: var(--fg-faint); max-width: var(--measure); text-wrap: pretty; }
+.figure__caption strong { color: var(--fg-dim); font-weight: 500; }

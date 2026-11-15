@@ -1,0 +1,35 @@
+{
+  // `script/**` is included deliberately. It used to be outside the typecheck, which
+  // meant `npm run typecheck` — the first gate before every deployment — did not check
+  // the script that BUILDS the deployable, nor the harnesses that verify it. A type
+  // error there surfaced only when someone ran the script, and a plain syntax error
+  // survived a fully green `npm run verify`. Adding it caught one real fault
+  // immediately: a `spawn()` result cast to a type that claimed a writable stdin the
+  // process did not have.
+  "include": ["client/src/**/*", "shared/**/*", "server/**/*", "script/**/*.ts", "sdk/**/*.ts", "cli/**/*.ts", "examples/**/*.ts"],
+  "exclude": ["node_modules", "build", "dist"],
+  "compilerOptions": {
+    "incremental": true,
+    "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
+    "noEmit": true,
+    "module": "ESNext",
+    // No `target` was set, so TypeScript fell back to ES5 while `module` was
+    // ESNext — an inconsistent pair that made ordinary modern syntax (iterating
+    // a Map, for instance) a type error even though esbuild and Vite emit for a
+    // modern runtime. Node 20 and every browser this console supports are ES2022.
+    "target": "ES2022",
+    "strict": true,
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "jsx": "preserve",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "types": ["node", "vite/client"],
+    "paths": {
+      "@/*": ["./client/src/*"],
+      "@shared/*": ["./shared/*"]
+    }
+  }
+}

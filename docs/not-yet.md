@@ -1,0 +1,79 @@
+# What Oathrion does not do yet
+
+Oathrion is a **preview**. This page says, plainly, what it does not do or has not proven, so
+you can decide before you rely on it. The technical detail, with the reasons, is in
+[limitations.md](limitations.md). The measurements are in
+[STRESS-TEST-LOG.md](STRESS-TEST-LOG.md).
+
+## It does not do
+
+- **It only governs what goes through it.** An agent that holds its own key to a tool, or that
+  has the raw MCP server in its configuration, can act without Oathrion. Reconciliation sees
+  some of those actions after the fact, on GitHub, Slack, Linear and Stripe. It does not stop
+  them. The client's own tools are outside it too: Cursor's built-in shell and file editing,
+  and Claude Code's file reads. Claude Code's shell and file edits are checked by local rules
+  (a hook), which read the command line, not what it really does.
+- **It does not solve prompt injection.** It does not detect injected instructions. When Claude Code has read a web page, a search, an issue or a message, the rest of its session's outgoing actions ask a person, saying where it read from; the provenance is lost if the content is copied into a file another session reads. With decoys planted (`oathrion decoys plant`), a fake secret that shows up in what the agent sends is refused — a sign it was tricked — but a decoy sent encoded or split is not recognised. It bounds what a tricked agent can do — a refund
+  ceiling holds whether or not the agent was fooled — and that is a smaller promise.
+- **It cannot undo an action already taken at a provider**, and it cannot revoke a token there.
+- **It cannot prove to a third party that it wrote a receipt.** The chain shows that nothing
+  was edited, removed or reordered since. There is no signature and no external anchor.
+- **It cannot erase one person from a live organization.** The person's name is inside the
+  chained receipts, so erasing it would look like tampering. A whole organization can be
+  erased.
+- **It does not deduplicate at the provider.** If a provider receives the same creation twice,
+  it creates two things. Oathrion's part is to refuse a retry when the first outcome is
+  unknown.
+- **`oathrion wrap` does not understand resources yet.** You cannot write « this repository
+  and not that one » for a wrapped server. Its classification of tools is a cautious guess
+  that you correct rule by rule, and pinning tool definitions does not catch a server that
+  keeps its declaration but changes what it does.
+- **`oathrion wrap` does not let you approve from your phone.** It can tell you on Slack, but
+  the console listens only on your machine: you decide there, or in your client. Approving
+  from Slack is part of the team version, with a shared Oathrion.
+- **`oathrion wrap` does not contain an agent that can read your files.** It governs the
+  MCP server it wraps, nothing else: your client's own shell and file tools go around it, and
+  an agent that can read `~/.oathrion` can read the secret that signs console sessions and
+  approve its own actions. See [what it does not do](wrap.md#what-it-does-not-do).
+- **It is not hosted.** You run it yourself: on your machine with `oathrion wrap`, or on your
+  servers.
+- **Four connectors only:** GitHub, Slack, Linear, Stripe. Anything else goes through an MCP
+  server, wrapped or declared.
+
+- **Stop an agent that has an unrestricted shell on the same machine.** No local tool running
+  as the same user can: such an agent can read the console's secret, the database, or a
+  server's token in the client's configuration. Oathrion local keeps the console's sign-in
+  link out of an agent's shell and tells the agent not to try; keep the agent's shell under
+  your client's approval. The team version (another approver, tokens in the vault) is the
+  answer when it matters.
+- **Remote MCP servers whose sign-in (OAuth) is handled by the client**, such as a server
+  signed in from Claude Code with `/mcp`. Remote servers with their token in the client's
+  configuration are governed.
+
+## It has not proven
+
+- **That clients other than Cursor work.** Claude Code announces that it can ask for an
+  approval inside the client, and its exact opening sequence is replayed in the tests; it has
+  not been seen yet in front of a person. Claude Desktop has not been verified.
+- **`npx oathrion` and `oathrion wrap` on macOS and Windows.** They are verified on Linux.
+  The « Decide » button (a dialog on macOS, a Windows notification) is tested against a
+  fake launcher only.
+  On Windows, `npx oathrion` writes the `cmd /c npx …` form that Claude Code documents for
+  native Windows; nobody has run it there yet. Changing Claude Code's servers needs its
+  `claude` command on the `PATH`; if it is missing, `npx oathrion` says so and leaves those
+  servers as they are.
+- **The local Oathrion for 12 hours.** The team server has run 12 hours without an error;
+  the local one, behind `npx oathrion`, has run one hour on its endurance bench without an
+  error (17,989 calls, `script/endurance-pivot.mjs`).
+- **More than 12 hours of continuous running.** A 72-hour run is planned.
+- **Several instances sharing one database**, beyond the two-process test.
+- **Resistance to a third-party penetration test.** There has been none.
+- **That someone who did not build it gets through the setup alone.** No acceptance session
+  with outside testers has been run yet.
+- **One-click connection (OAuth)** against the real Slack and Linear.
+
+## What we do with this list
+
+Each line is either a limit we chose and explain, or work in progress. When one is closed,
+it moves to the [changelog](../CHANGELOG.md) with the evidence. If you hit something that
+is not on this page, it is a bug: please report it.

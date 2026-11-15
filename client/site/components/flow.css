@@ -1,0 +1,213 @@
+/*
+ * La scène du Hero.
+ *
+ * Toute la mise en mouvement est en CSS, pilotée par un seul attribut `data-outcome` sur
+ * la racine. React décide *quelle* issue montrer ; il ne pilote aucune image. Le navigateur
+ * compose les animations sur son propre fil, donc la scène ne saccade pas pendant que la
+ * page charge ses polices.
+ */
+
+.flow {
+  position: relative;
+  width: 100%;
+}
+
+.flow__svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* ------------------------------------------------------------------ pièces */
+
+.flow__vault-label {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.22em;
+  fill: var(--fg-faint);
+}
+
+.flow__stage-label {
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.1em;
+  fill: var(--fg-faint);
+  transition: fill var(--t-base) var(--ease);
+}
+
+.flow__node {
+  fill: var(--bg-elevated);
+  stroke: var(--line-strong);
+  stroke-width: 1;
+  transition: fill var(--t-base) var(--ease), stroke var(--t-base) var(--ease);
+}
+
+.flow__end-label,
+.flow__human-label {
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.1em;
+  fill: var(--fg-faint);
+}
+
+.flow__human path { stroke: var(--line); transition: stroke var(--t-base) var(--ease); }
+.flow__human circle { fill: var(--bg-elevated); stroke: var(--line-strong); stroke-width: 1; transition: all var(--t-base) var(--ease); }
+.flow__human { opacity: 0.35; transition: opacity var(--t-base) var(--ease); }
+
+.flow__cross line { stroke: var(--block); opacity: 0; transition: opacity var(--t-base) var(--ease); }
+
+.flow__spark circle { fill: var(--flow-bright); opacity: 0; }
+.flow__spark--core circle { fill: #fff; }
+
+/* ------------------------------------------------------- l'état par défaut */
+
+/*
+ * Au repos — pas de JavaScript, ou mouvement réduit — la scène est celle d'une action
+ * AUTORISÉE, entièrement dessinée. C'est ce que montrent une capture et un aperçu de lien.
+ */
+.flow[data-running="no"] .flow__node { fill: var(--flow-deep); stroke: var(--flow); }
+.flow[data-running="no"] .flow__stage-label { fill: var(--fg-dim); }
+
+/* ------------------------------------------------------------ les trajets */
+
+@media (prefers-reduced-motion: no-preference) {
+  .flow[data-running="yes"] .flow__spark circle { opacity: 1; }
+
+  /* Le passage : l'étincelle traverse d'un bout à l'autre. */
+  .flow[data-outcome="allow"] .flow__spark { animation: travel-through var(--cycle, 5200ms) var(--ease) infinite; }
+  .flow[data-outcome="block"] .flow__spark { animation: travel-stop var(--cycle, 5200ms) var(--ease) infinite; }
+  .flow[data-outcome="hold"]  .flow__spark { animation: travel-hold var(--cycle, 5200ms) var(--ease) infinite; }
+
+  @keyframes travel-through {
+    0%   { transform: translate(22px, 150px); opacity: 0; }
+    6%   { opacity: 1; }
+    82%  { transform: translate(498px, 150px); opacity: 1; }
+    94%, 100% { transform: translate(498px, 150px); opacity: 0; }
+  }
+
+  /* Le refus : l'étincelle entre, atteint la décision, et s'éteint sur place. */
+  @keyframes travel-stop {
+    0%   { transform: translate(22px, 150px); opacity: 0; }
+    6%   { opacity: 1; }
+    55%  { transform: translate(362px, 150px); opacity: 1; }
+    70%  { transform: translate(362px, 150px); opacity: 0.15; }
+    100% { transform: translate(362px, 150px); opacity: 0; }
+  }
+
+  /* L'attente : l'étincelle monte vers l'humain, s'y arrête, puis repart. */
+  @keyframes travel-hold {
+    0%   { transform: translate(22px, 150px); opacity: 0; }
+    6%   { opacity: 1; }
+    44%  { transform: translate(392px, 150px); }
+    54%  { transform: translate(430px, 150px); }
+    62%  { transform: translate(430px, 96px); }
+    70%  { transform: translate(470px, 96px); opacity: 1; }
+    78%  { transform: translate(470px, 96px); opacity: 0.35; }
+    86%  { transform: translate(470px, 96px); opacity: 1; }
+    96%  { transform: translate(498px, 150px); opacity: 1; }
+    100% { transform: translate(498px, 150px); opacity: 0; }
+  }
+
+  /* Les contrôles s'allument au passage de l'étincelle. */
+  .flow[data-running="yes"] .flow__stage .flow__node {
+    animation: node-lit var(--cycle, 5200ms) var(--ease) infinite;
+    animation-delay: calc(var(--i) * 170ms);
+  }
+  .flow[data-running="yes"] .flow__stage .flow__stage-label {
+    animation: label-lit var(--cycle, 5200ms) var(--ease) infinite;
+    animation-delay: calc(var(--i) * 170ms);
+  }
+  @keyframes node-lit {
+    0%, 8%    { fill: var(--bg-elevated); stroke: var(--line-strong); }
+    18%, 72%  { fill: var(--flow-deep);   stroke: var(--flow); }
+    92%, 100% { fill: var(--bg-elevated); stroke: var(--line-strong); }
+  }
+  @keyframes label-lit {
+    0%, 8%    { fill: var(--fg-faint); }
+    18%, 72%  { fill: var(--fg-dim); }
+    92%, 100% { fill: var(--fg-faint); }
+  }
+
+  .flow__pulse {
+    fill: none; stroke: var(--flow); stroke-width: 1;
+    animation: pulse var(--cycle, 5200ms) var(--ease) infinite;
+  }
+  @keyframes pulse {
+    0%   { r: 7; opacity: 0.9; }
+    14%  { r: 15; opacity: 0; }
+    100% { r: 15; opacity: 0; }
+  }
+}
+
+/* ------------------------------------------------- ce que l'issue modifie */
+
+.flow[data-outcome="block"] .flow__cross line { opacity: 1; }
+.flow[data-outcome="block"] .flow__end--out circle:first-of-type { stroke: var(--block); }
+
+.flow[data-outcome="hold"] .flow__human { opacity: 1; }
+.flow[data-outcome="hold"] .flow__human path { stroke: var(--hold); }
+.flow[data-outcome="hold"] .flow__human circle { stroke: var(--hold); fill: rgba(245,181,68,0.12); }
+.flow[data-outcome="hold"] .flow__human-label { fill: var(--hold); }
+
+.flow[data-outcome="allow"] .flow__end--out circle:first-of-type { stroke: var(--allow); }
+
+/* ------------------------------------------------------------- la lecture */
+
+.flow__readout {
+  margin-top: var(--s-5);
+  padding-top: var(--s-5);
+  border-top: 1px solid var(--line-soft);
+  display: grid;
+  gap: var(--s-2);
+  min-height: 7.5rem;
+}
+
+.flow__request { font-size: var(--t-small); color: var(--fg-dim); }
+
+.flow__verdict {
+  font-size: 1.125rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  transition: color var(--t-base) var(--ease);
+}
+.flow__verdict--allow { color: var(--allow); }
+.flow__verdict--hold  { color: var(--hold); }
+.flow__verdict--block { color: var(--block); }
+
+.flow__detail { font-size: var(--t-small); color: var(--fg-faint); line-height: 1.5; text-wrap: pretty; }
+
+@media (max-width: 40rem) {
+  .flow__readout { min-height: 8.5rem; }
+}
+
+/* ------------------------------------------------------- le noyau WebGL */
+
+/*
+ * Le noyau est EN ARRIÈRE de la scène SVG, pas à la place.
+ *
+ * Les deux disent des choses différentes : le volume donne la présence, le tracé donne la
+ * séquence. Superposés, le Hero gagne la profondeur qui lui manquait sans perdre ce qu'il
+ * expliquait — et sur un appareil qui ne peut pas porter le volume, il ne manque que la
+ * profondeur.
+ */
+.scene { position: relative; }
+
+.core {
+  position: absolute;
+  inset: -14% -8% auto -8%;
+  height: 128%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  animation: core-in 1.6s var(--ease-out) 0.25s forwards;
+}
+.core canvas { width: 100% !important; height: 100% !important; display: block; }
+.core[data-failed="yes"] { display: none; }
+
+@keyframes core-in { to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) { .core { display: none; } }
+
+/* La scène SVG passe devant, et s'allège pour ne pas lutter avec le volume. */
+.scene .flow { position: relative; z-index: 1; }
+.scene .flow__svg { opacity: 0.96; }

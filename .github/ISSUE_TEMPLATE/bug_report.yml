@@ -1,0 +1,55 @@
+name: Bug report
+description: Something does not work as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. **A security vulnerability does not belong here**: follow SECURITY.md.
+        Never paste a token, a key, a password or a session cookie in an issue.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where
+      options:
+        - oathrion wrap (local)
+        - Full server / console
+        - MCP gateway
+        - A connector (GitHub, Slack, Linear, Stripe)
+        - HTTP firewall
+        - SDK / CLI
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: The shortest sequence that shows it. For `oathrion wrap`, the MCP server command and your client.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: 0.1.0-preview.0, or a commit hash
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: OS, Node version, MCP client and its version
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log lines
+      description: For `oathrion wrap`, `~/.oathrion/<name>/oathrion.log`. Remove anything secret first.
+      render: text

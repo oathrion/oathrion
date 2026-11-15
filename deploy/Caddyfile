@@ -1,0 +1,14 @@
+# TLS termination in front of Oathrion.
+# With a public DNS name, Caddy obtains and renews a certificate automatically.
+# With OATHRION_DOMAIN=localhost it uses its internal CA (testing only).
+{$OATHRION_DOMAIN} {
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+	reverse_proxy {$OATHRION_UPSTREAM:placet:5000} {
+		health_uri /api/ready
+		health_interval 10s
+	}
+}
