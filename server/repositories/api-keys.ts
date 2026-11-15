@@ -285,9 +285,16 @@ export const apiKeyStore = {
 
   create(input: CreateApiKeyInput): ApiKeyRecord {
     const now = new Date().toISOString();
+    /*
+     * A key from the configuration has a fixed id, and two instances starting together both
+     * adopt it: `OR IGNORE` lets the loser read the winner's row back instead of failing a
+     * request with a duplicate key (CI, 15 November). A key issued in the console stays a
+     * strict insert.
+     */
+    const verb = input.source === "config" ? "INSERT OR IGNORE INTO" : "INSERT INTO";
     rawDb
       .prepare(
-        `INSERT INTO api_keys
+        `${verb} api_keys
            (id, organization_id, name, role, secret_hash, prefix, source,
             created_at, created_by, expires_at, agent_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

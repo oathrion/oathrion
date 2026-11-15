@@ -300,11 +300,17 @@ async function listedBySession(home: string, extraEnv: Record<string, string>): 
     const message = JSON.parse(line) as { id: number };
     answers.get(message.id)?.(message as unknown as Record<string, unknown>);
   });
+  /* Parti sans répondre : échouer tout de suite, avec ce qu'il a dit, plutôt qu'attendre le délai du test. */
+  const gone = new Promise<never>((_, fail) => child.once("exit", (code) => fail(new Error(`wrap exited (${String(code)}) before answering:\n${stderr}`))));
+  gone.catch(() => undefined);
   const ask = (id: number, method: string, params: Record<string, unknown> = {}) =>
-    new Promise<Record<string, unknown>>((done) => {
-      answers.set(id, done);
-      child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
-    });
+    Promise.race([
+      new Promise<Record<string, unknown>>((done) => {
+        answers.set(id, done);
+        child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
+      }),
+      gone,
+    ]);
   await ask(1, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "1" } });
   const listed = (await ask(2, "tools/list")) as { result: { tools: { name: string; description: string }[] } };
   child.stdin.end();
