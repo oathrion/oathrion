@@ -54,7 +54,7 @@ import { CONNECTOR_CREDENTIALS_TABLE } from "./021-connector-credentials";
 import { PENDING_INTERCEPTIONS_TABLE } from "./022-pending-interceptions";
 import { AGENT_DOORS_TABLE } from "./025-agent-doors";
 import { RECONCILE_FINDINGS_TABLE, RECONCILE_RUNS_TABLE } from "./026-reconcile";
-import { MANDATES_TABLE } from "./030-mandates";
+import { MANDATE_GRANTS_TABLE, MANDATE_KEYS_TABLE, MANDATES_TABLE } from "./030-mandates";
 import { MANDATE_RECEIPTS_TABLE } from "./031-mandate-receipts";
 import { QUOTA_PERIOD_COUNTS_TABLE } from "./028-quota-period-counts";
 import { RECEIPT_CHAIN_CHECKPOINTS_TABLE } from "./029-receipt-chain-checkpoints";
@@ -250,8 +250,14 @@ export const INSPECTED_TABLES = [
    * raison — le littéral du nom de table reste dans le fichier de la migration.
    */
   CONNECTOR_CREDENTIALS_TABLE,
-  /* Le mandat vérifiable : la migration 030 inspecte sa propre table avant de la créer. */
+  /*
+   * Le mandat vérifiable : la migration 030 inspecte sa première table avant de créer les
+   * trois. Les deux autres manquaient : le test sur une vraie base l'a vu à son premier
+   * passage dans la CI de GitHub (15 novembre).
+   */
   MANDATES_TABLE,
+  MANDATE_KEYS_TABLE,
+  MANDATE_GRANTS_TABLE,
   /* Les reçus contresignés : la migration 031 inspecte sa propre table. */
   MANDATE_RECEIPTS_TABLE,
   /* La migration 022 inspecte sa propre table avant de la créer. */

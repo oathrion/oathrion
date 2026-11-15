@@ -295,6 +295,9 @@ jobs:
           server/test/tenant-quota-config-postgres.test.ts
           server/test/rate-limit-shared.test.ts
         env:
+          # These files point the server at PostgreSQL themselves; the job's DATABASE_URL,
+          # with no driver named, is the ambiguity the server refuses at import.
+          DATABASE_URL: ""
           OATHRION_REQUIRE_POSTGRES: "true"
           OATHRION_TEST_POSTGRES_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
           OATHRION_TEST_PG_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres

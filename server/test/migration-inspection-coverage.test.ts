@@ -94,6 +94,8 @@ const CONSTANTS: Record<string, string> = {
   // Migration 029 : le point de reprise de la vérification des chaînes.
   RECEIPT_CHAIN_CHECKPOINTS_TABLE: "receipt_chain_checkpoints",
   MANDATES_TABLE: "mandates",
+  MANDATE_KEYS_TABLE: "mandate_keys",
+  MANDATE_GRANTS_TABLE: "mandate_grants",
   MANDATE_RECEIPTS_TABLE: "mandate_receipts",
   // Migration 022 — le sas des requêtes en attente d'approbation.
   PENDING_INTERCEPTIONS_TABLE: "pending_interceptions",
