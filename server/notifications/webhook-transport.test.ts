@@ -106,7 +106,7 @@ describe("guarded webhook transport", () => {
         body: "{}",
         timeoutMs: 2_000,
       }),
-    ).rejects.toThrow(/127\.0\.0\.1.*loopback/i);
+    ).rejects.toThrow(/(127\.0\.0\.1|::1).*loopback/i);
 
     // The proof that this is prevention and not merely detection: the receiver
     // never saw a request, so no payload left the process.

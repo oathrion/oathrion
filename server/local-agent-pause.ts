@@ -185,13 +185,30 @@ export function stopAgent(pid: number): boolean {
       /* le repli ci-dessous */
     }
   }
+  /* Sans groupe : lui et ce qu'il a lancé, relevés avant le signal (ensuite ils changent de parent). */
+  const members = [pid, ...descendants(pid)];
   try {
     process.kill(pid, "SIGTERM");
-    if (stoppedByUs.delete(pid)) process.kill(pid, "SIGCONT");
-    return true;
   } catch {
     return false;
   }
+  stoppedByUs.delete(pid);
+  for (const member of members.slice(1)) {
+    try {
+      process.kill(member, "SIGTERM");
+    } catch {
+      /* déjà parti */
+    }
+  }
+  /* Arrêté par signal (par nous ou par Ctrl+Z), il ne lirait la demande qu'au réveil : on le réveille. */
+  for (const member of members) {
+    try {
+      process.kill(member, "SIGCONT");
+    } catch {
+      /* déjà parti */
+    }
+  }
+  return true;
 }
 
 /**

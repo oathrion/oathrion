@@ -258,6 +258,10 @@ jobs:
       - name: Apply migrations to PostgreSQL
         run: npm run migrate:postgres
 
+      # The smoke test, the multi-instance run and the identity E2E all start the bundle.
+      - name: Build
+        run: npm run build
+
       - name: PostgreSQL smoke test
         run: npm run smoke:postgres
 
@@ -267,9 +271,6 @@ jobs:
       # that silently keeps per-process state.
       - name: Multi-instance and tenancy
         run: npm run e2e:instances
-
-      - name: Build identity E2E bundle
-        run: npm run build
 
       - name: Phase 12 shared identity E2E
         run: npm run e2e:identity

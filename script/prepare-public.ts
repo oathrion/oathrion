@@ -6,9 +6,10 @@
  *   npm run public:prepare -- --contact contact@… --security security@… --repo https://github.com/<org>/oathrion
  *   … --verify                                                  # + typage, lint, build, tests sur l'arbre produit
  *
- * Produit `dist-public/oathrion/`, un dépôt git NEUF dont l'index contient l'arbre public. Le
- * commit unique est laissé à la personne : son nom et son adresse publics ne sont pas ceux de
- * ce dépôt de travail.
+ * Produit `dist-public/oathrion/`, un dépôt git dont l'index contient l'arbre public. La première
+ * fois, le dépôt est NEUF ; ensuite son `.git` (historique, `origin`) est gardé, et l'index ne
+ * porte que ce qui a changé : un commit puis un push ordinaires, jamais forcés. Les commits sont
+ * laissés à la personne : son nom et son adresse publics ne sont pas ceux de ce dépôt de travail.
  *
  * ## Ce qui sort, et ce qui reste
  *
@@ -38,7 +39,7 @@
  */
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -128,7 +129,10 @@ const missing = [...new Set(placeholders.filter((p) => p.value === undefined).ma
 if (missing.length > 0 && !draft) fail(`il manque ${missing.join(", ")}. Ajoutez-les, ou produisez un --brouillon.`);
 
 /* ----------------------------------------------------------------- 4. copier, nettoyer */
-rmSync(OUT, { recursive: true, force: true });
+/* Déjà poussé : on garde son `.git`, le reste est refait. */
+const keptGit = existsSync(join(OUT, ".git"));
+if (keptGit) for (const entry of readdirSync(OUT)) if (entry !== ".git") rmSync(join(OUT, entry), { recursive: true, force: true });
+if (!keptGit) rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
 const report = new Map<number, Map<string, number>>();
 const isText = (path: string) => !/\.(png|jpe?g|gif|webp|ico|woff2?|ttf|otf|pdf|zip|gz|tgz|db|sqlite)$/i.test(path);
@@ -180,10 +184,15 @@ if (leaks.length > 0) fail(`des identifiants privés restent dans l'arbre produi
 say(`aucun identifiant privé dans l'arbre produit (${String(literals.length)} recherché(s), plus toute adresse @gmail.com)`);
 if (reviewName.length > 0) say(`À RELIRE — le nom du titulaire figure dans : ${reviewName.join(", ")} (voulu pour NOTICE, licences, pages légales)`);
 
-/* ------------------------------------------------------- 6. un dépôt neuf, sans commit */
-git(["init", "-q", "-b", "main"], OUT);
+/* ------------------------------------------- 6. un dépôt (neuf la première fois), sans commit */
+if (!keptGit) git(["init", "-q", "-b", "main"], OUT);
 git(["add", "-A"], OUT);
-say(`dist-public/oathrion/ : dépôt git neuf, ${String(published.length)} fichiers dans l'index, AUCUN commit (à faire par vous, sous votre nom public)`);
+if (keptGit) {
+  const changed = git(["status", "--short"], OUT).split("\n").filter(Boolean).length;
+  say(`dist-public/oathrion/ : historique gardé, ${String(changed)} fichier(s) changé(s) dans l'index, AUCUN commit (à faire par vous, sous votre nom public)`);
+} else {
+  say(`dist-public/oathrion/ : dépôt git neuf, ${String(published.length)} fichiers dans l'index, AUCUN commit (à faire par vous, sous votre nom public)`);
+}
 
 /* ------------------------------------------------------------------ 7. --verify */
 if (flag("verify")) {
