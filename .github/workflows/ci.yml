@@ -419,7 +419,14 @@ jobs:
 
           # Docker's own view of the HEALTHCHECK, which exercises the directive in the
           # Dockerfile rather than only the endpoint behind it.
-          test "$(docker inspect -f '{{.State.Health.Status}}' placet-ci)" = "healthy"
+          # Its first probe runs only after `--interval` (30 s): until then the status reads
+          # "starting", so it is awaited rather than read once.
+          for i in $(seq 1 60); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' placet-ci)
+            [ "$status" = "healthy" ] && break
+            if [ "$i" = "60" ]; then echo "::error::Docker's HEALTHCHECK says $status, not healthy, after 60 s"; docker logs placet-ci; exit 1; fi
+            sleep 1
+          done
 
           # SIGTERM must drain rather than cut connections. `docker stop` sends SIGTERM and
           # waits, so a missing drain shows up as the container being killed after the
