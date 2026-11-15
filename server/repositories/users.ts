@@ -133,8 +133,11 @@ function toMembership(row: MembershipRow): Membership {
 
 const byEmail = rawDb.prepare(`SELECT * FROM users WHERE lower(email) = lower(?)`);
 const byId = rawDb.prepare(`SELECT * FROM users WHERE id = ?`);
+// `OR IGNORE` (`ON CONFLICT DO NOTHING` on PostgreSQL): two instances starting together both
+// see no row in `ensure`, and both insert it. The loser then reads the winner's row back
+// instead of failing a request with a duplicate key (CI, 15 November).
 const insertUser = rawDb.prepare(
-  `INSERT INTO users (id, email, name, password_hash, password_updated_at, password_source,
+  `INSERT OR IGNORE INTO users (id, email, name, password_hash, password_updated_at, password_source,
      status, created_at, last_login_at)
    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
 );
