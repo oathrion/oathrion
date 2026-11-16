@@ -100,7 +100,7 @@ describe("le téléphone (Telegram)", () => {
     expect(sent.body.photo).toBe("(file)");
     expect(String(sent.body.caption)).toContain('Claude Code wants to use "create_pull_request"');
     const keyboard = JSON.parse(String(sent.body.reply_markup)) as { inline_keyboard: { text: string; callback_data: string }[][] };
-    expect(keyboard.inline_keyboard[0]!.map((b) => b.text)).toEqual(["Approve", "Reject"]);
+    expect(keyboard.inline_keyboard[0]!.map((b) => b.text)).toEqual(["Approve", "Reject", "Allow 1 hour"]);
     expect(keyboard.inline_keyboard[0]![0]!.callback_data).toMatch(/^[A-Za-z0-9_-]{12}:approve$/);
   });
 

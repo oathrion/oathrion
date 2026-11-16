@@ -69,29 +69,29 @@ export default function LocalSettingsPage() {
               <>Leave your computer at home and decide from your phone, on Telegram: <Command>oathrion phone telegram</Command> (it asks for the token of a bot made with @BotFather).</>
             )}
           </Row>
-          <Row icon={Eye} title="The agent watch" state={!linux ? "Linux only, for now" : data.watch.on ? "On, all the time" : "Off"} on={data.watch.on}>
+          <Row icon={Eye} title="Agents started without Oathrion" state={!linux ? "Linux only, for now" : data.watch.on ? "Paused, and you are asked" : "Not watched"} on={data.watch.on}>
             {!linux ? (
               <>Not on this system yet. Here, your agents' actions go through Oathrion's approvals and receipts.</>
             ) : data.watch.on ? (
-              <>An AI agent running outside the jail is paused, and you are asked. To turn it off: <Command>oathrion watch --always --undo</Command></>
+              <>An AI agent started without Oathrion's protection is paused until you decide. To stop watching: <Command>oathrion watch --always --undo</Command></>
             ) : (
               <>Like an antivirus for AI agents: <Command>npx oathrion</Command> turns it on.</>
             )}
           </Row>
-          <Row icon={ShieldCheck} title="The jail, by default" state={!linux ? "Linux only, for now" : data.jail.agents.length > 0 ? data.jail.agents.join(", ") : "Off"} on={data.jail.agents.length > 0}>
+          <Row icon={ShieldCheck} title="Secrets out of reach" state={!linux ? "Linux only, for now" : data.jail.agents.length > 0 ? data.jail.agents.join(", ") : "Off"} on={data.jail.agents.length > 0}>
             {!linux ? (
               <>Not on this system yet: it is built on a Linux sandbox (bubblewrap).</>
             ) : data.jail.agents.length > 0 ? (
-              <>Typed in a terminal, these agents start where they cannot go around Oathrion. To undo: <Command>oathrion jail --always --undo</Command></>
+              <>Started from a terminal, these agents run in a closed space: they cannot read your passwords and keys, nor go around Oathrion. To undo: <Command>oathrion jail --always --undo</Command></>
             ) : (
-              <>Your agents start where they cannot reach your secrets: <Command>npx oathrion</Command> sets it up (Linux).</>
+              <>Your agents run in a closed space where they cannot read your passwords and keys: <Command>npx oathrion</Command> sets it up (Linux).</>
             )}
           </Row>
-          <Row icon={KeyRound} title="Decoys" state={data.decoys.count > 0 ? `${String(data.decoys.count)} laid` : "None"} on={data.decoys.count > 0}>
+          <Row icon={KeyRound} title="Fake secrets (traps)" state={data.decoys.count > 0 ? `${String(data.decoys.count)} in place` : "None"} on={data.decoys.count > 0}>
             {data.decoys.count > 0 ? (
-              <>Fake secrets no honest task reads: you are told when anything does. To take them away: <Command>oathrion decoys remove</Command></>
+              <>Fake passwords that no honest task reads: if an agent reads one, you are told at once. To take them away: <Command>oathrion decoys remove</Command></>
             ) : (
-              <>Fake secrets no honest task reads, and you are told when anything does: <Command>oathrion decoys plant</Command></>
+              <>Fake passwords that no honest task reads: if an agent reads one, you are told at once. <Command>oathrion decoys plant</Command> puts them in place.</>
             )}
           </Row>
           <Row icon={Users} title="For a team" state="Available" on={false}>

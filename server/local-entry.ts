@@ -90,6 +90,7 @@ async function main(): Promise<void> {
     }, knob("OATHRION_LOCAL_HUB_SWEEP_MS"));
     /* Prévenir l'approbateur : le bureau par défaut, Slack s'il est configuré (`server/local-notifications.ts`). */
     const { readNotificationSettings, registerLocalNotifications } = await import("./local-notifications");
+    const { HourPasses } = await import("./local-hour-passes");
     const { notifier } = await import("./notifications");
     const { existsSync: exists } = await import("node:fs");
     const { dirname: parentOf, join: joinPath } = await import("node:path");
@@ -132,7 +133,9 @@ async function main(): Promise<void> {
       desktopAllowed: process.env.OATHRION_LOCAL_NOTIFY_DESKTOP !== "0",
       ...(exists(logo) ? { image: logo } : {}),
       /* « Approve » / « Reject » dans la notification : la même voie que la console. */
-      decideApproval: async (approvalId, status) => (await import("./routes")).resolveLocalApproval(hub.organization, approvalId, status, "you, from the notification"),
+      decideApproval: async (approvalId, status, by) => (await import("./routes")).resolveLocalApproval(hub.organization, approvalId, status, by ?? "you, from the notification"),
+      /* « Allow 1 hour » : une permission bornée, gardée dans le dossier du pivot (`local-hour-passes.ts`). */
+      passes: new HourPasses(hub.dir),
       /* La question posée dans le client : la notification attend 10 s (20 avant le 9 novembre : trop long devant son écran), et ne part que si rien n'est décidé. */
       inClient: {
         asks: (agentId) => hub.asksInClient(agentId),
@@ -206,7 +209,7 @@ async function main(): Promise<void> {
         /* La démo : sur le téléphone aussi tout de suite, c'est son « waouh » (`cli/wrap/onboarding.ts`). */
         phoneNow: true,
         onChoice: (choice) => ({
-          text: choice === "stop" ? `Stopped. ${nova} won't do anything.` : choice === "allow" ? `${nova} is allowed outside the jail.` : `${nova} resumed, this time only.`,
+          text: choice === "stop" ? `Stopped. ${nova} won't do anything.` : choice === "allow" ? `${nova} may run without Oathrion's protection.` : `${nova} resumed, this time only.`,
           share: tried,
         }),
       });
@@ -257,8 +260,8 @@ async function main(): Promise<void> {
           id: `outside_${agent.agent}`,
           name: agent.agent,
           /* Court, comme la maquette : le chemin et le processus sont dans la console (« details »). */
-          title: paused ? `${face(agent.agent).name} (${agent.agent}) is paused` : `${face(agent.agent).name} (${agent.agent}) runs outside the jail`,
-          description: paused ? "It was running outside Oathrion's jail. Nothing is lost." : "It can go around Oathrion. Stop it, or allow it.",
+          title: paused ? `${face(agent.agent).name} (${agent.agent}) is paused` : `${face(agent.agent).name} (${agent.agent}) runs without Oathrion's protection`,
+          description: paused ? "It was running without Oathrion's protection. Nothing is lost." : "It can go around Oathrion. Stop it, or allow it.",
           /* « Stop », le geste sûr, en premier (la maquette du 11 novembre) ; « Allow » : dehors, pour de bon. */
           actions: [
             { id: "stop", label: "Stop" },
@@ -277,7 +280,7 @@ async function main(): Promise<void> {
               /* Autorisé dehors, pour de bon, en le choisissant ici ; « Stop allowing » dans la console le défait. */
               hub.outsideAllowances.allow(agent.exe, agent.agent, "you, from the notification");
               resumeAgent(agent.pid);
-              return { text: `${mascot} is allowed outside the jail.`, share: shareOf(hub.events.record({ kind: "allowed", agent: agent.agent, by: "you, from the notification" })) };
+              return { text: `${mascot} may run without Oathrion's protection.`, share: shareOf(hub.events.record({ kind: "allowed", agent: agent.agent, by: "you, from the notification" })) };
             }
             /* Pour cette fois seulement. */
             hub.allowLaunchOnce(agent.launch);
@@ -305,7 +308,7 @@ async function main(): Promise<void> {
           id: `decoy_${event.path}`,
           name: "decoy",
           title: "Something read one of your decoys",
-          description: `No honest task does that: ${shown} was read. ${outside.length > 0 ? `Running outside the jail at that moment: ${outside.map((a) => `${a.agent} (process ${String(a.pid)})`).join(", ")}.` : "No AI agent was running outside the jail at that moment."} If it was you, or a backup or search tool, you can ignore it.`,
+          description: `No honest task does that: ${shown} was read. ${outside.length > 0 ? `Running without Oathrion's protection at that moment: ${outside.map((a) => `${a.agent} (process ${String(a.pid)})`).join(", ")}.` : "No AI agent was running outside the jail at that moment."} If it was you, or a backup or search tool, you can ignore it.`,
           actions: [{ id: "open", label: "See what happened" }],
           feedbackAbout: `reported that ${shown} was read`,
         });

@@ -9,6 +9,7 @@
  * `share`, pour ce qu'elle partage — JAMAIS un chemin, un nom de fichier, une commande, un numéro
  * de processus, un nom de serveur ou d'utilisateur.
  */
+import { describeApproval, notificationWords } from "@shared/approval-text";
 import type { Approval, Execution } from "@shared/types";
 
 import type { LocalEvent } from "./local-events";
@@ -55,19 +56,19 @@ function fromEvent(event: LocalEvent, face: Face = defaultFace): FeedItem | null
   const base = { id: event.id, at: event.at, agent: event.agent, mascot, ...(event.detail ? { detail: event.detail } : {}) };
   switch (event.kind) {
     case "paused":
-      return { ...base, tone: "warn", title: `${label} was paused: it was running outside Oathrion's jail.`, share: `Oathrion caught my AI agent ${event.agent} running outside its jail, and paused it until I decided.` };
+      return { ...base, tone: "warn", title: `${label} was paused: it was running without Oathrion's protection.`, share: `Oathrion caught my AI agent ${event.agent} running outside its jail, and paused it until I decided.` };
     case "reported":
-      return { ...base, tone: "warn", title: `${label} is running outside Oathrion's jail.`, share: `Oathrion told me my AI agent ${event.agent} was running outside its jail.` };
+      return { ...base, tone: "warn", title: `${label} is running without Oathrion's protection.`, share: `Oathrion told me my AI agent ${event.agent} was running outside its jail.` };
     case "resumed-once":
       return { ...base, tone: "info", title: `You let ${label} go on, this time only.`, share: `Oathrion paused my AI agent ${event.agent}; I let it go on, this time only.` };
     case "allowed":
-      return { ...base, tone: "info", title: `You allowed ${label} outside the jail, from now on.`, share: `I allowed my AI agent ${event.agent} outside Oathrion's jail.` };
+      return { ...base, tone: "info", title: `You let ${label} run without Oathrion's protection, from now on.`, share: `I allowed my AI agent ${event.agent} outside Oathrion's jail.` };
     case "forgotten":
-      return { ...base, tone: "good", title: `${label} is no longer allowed outside the jail.`, share: `My AI agent ${event.agent} now has to ask again, under Oathrion.` };
+      return { ...base, tone: "good", title: `${label} must run with Oathrion's protection again.`, share: `My AI agent ${event.agent} now has to ask again, under Oathrion.` };
     case "stopped":
       return { ...base, tone: "good", title: `You stopped ${label}.`, share: `Oathrion caught my AI agent ${event.agent} acting where it should not, and I stopped it in one click.` };
     case "new-agent":
-      return { ...base, tone: "warn", title: `Oathrion met a program it had never seen, which says it is ${event.agent}. It waited for you.`, share: `A program Oathrion had never seen wanted to act on my computer: it was stopped at the door until I said yes.` };
+      return { ...base, tone: "warn", title: `First time Oathrion met ${event.agent}: it waited for your yes.`, share: `A program Oathrion had never seen wanted to act on my computer: it was stopped at the door until I said yes.` };
     case "trusted":
       return { ...base, tone: "good", title: `You confirmed ${label}: it is yours.`, share: `Oathrion checked that ${event.agent} is really my AI agent before letting it act.` };
     case "blocked":
@@ -85,16 +86,23 @@ function fromApproval(approval: Approval, face: Face = defaultFace): FeedItem | 
   const execution = approval.executionId ?? approval.id;
   const { mascot, label } = who(approval.agentName);
   const at = approval.resolvedAt ?? approval.requestedAt;
-  const what = approval.title.replace(/^Approval required —\s*/, "");
   const approved = approval.status === "approved";
+  /*
+   * Ce qui était demandé, dit comme la console (16 novembre : la ligne montrait
+   * « mcp.carnet.create note · mcp://carnet/create_note »), et qui a tranché.
+   */
+  const text = describeApproval(approval);
+  const asked = [text.headline.replace(/^.*? wants to /, ""), text.where].filter(Boolean).join(" ");
+  const content = notificationWords(approval, null).content;
+  const byPass = approval.resolvedBy?.startsWith("your 1-hour permission") === true;
   return {
     id: `apr_${execution}`,
     at,
     agent: approval.agentName,
     mascot,
     tone: approved ? "good" : "bad",
-    title: approved ? `${label} asked before acting; you approved.` : `${label} asked before acting; you refused.`,
-    detail: what,
+    title: approved ? `${label} asked to ${asked}; ${byPass ? "your 1-hour permission approved it" : "you approved"}.` : `${label} asked to ${asked}; you refused.`,
+    ...(content ? { detail: `“${content}”` } : {}),
     share: approved ? `My AI agent ${approval.agentName} asked me before acting, and only went on once I said yes.` : `My AI agent ${approval.agentName} asked me before acting; I said no, and nothing happened.`,
   };
 }
@@ -106,6 +114,8 @@ function fromExecutions(executions: Execution[], face: Face = defaultFace): Feed
   const groups = new Map<string, { agent: string; at: string; count: number; kinds: Set<string> }>();
   for (const execution of executions) {
     if (execution.status === "pending") continue;
+    /* Refusée par la personne : la ligne « you refused » de la demande le dit déjà ; pas un second « Oathrion blocked ». */
+    if (execution.status === "blocked" && execution.approvalId) continue;
     if (execution.status === "blocked") {
       const { mascot, label } = who(execution.agentName);
       items.push({
@@ -115,7 +125,8 @@ function fromExecutions(executions: Execution[], face: Face = defaultFace): Feed
         mascot,
         tone: "bad",
         title: `Oathrion blocked ${label}: ${actionWords(execution.action)}.`,
-        detail: `${execution.action} · ${execution.target}`,
+        /* Pourquoi : la raison de la décision, pas l'identifiant technique de l'action. */
+        detail: execution.decisionReason || `${execution.action} · ${execution.target}`,
         share: `Oathrion blocked an action of my AI agent ${execution.agentName} before it ran.`,
       });
       continue;

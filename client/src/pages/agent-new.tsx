@@ -463,7 +463,7 @@ function ReviewRow({
 }) {
   return (
     <div className={cn("border-b border-card-border py-3 last:border-0", full && "sm:col-span-2")}>
-      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
       <dd className="mt-1 text-sm">{children}</dd>
     </div>
   );

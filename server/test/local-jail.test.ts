@@ -210,7 +210,7 @@ describe("la veille des agents : les prisons, et les agents dehors", () => {
     /* Le retrait va au fil d'actualité. */
     const feed = await api.get<{ title: string }[]>("/api/local/feed");
     expect(feed.status).toBe(200);
-    expect(feed.body.map((i) => i.title)).toContain("Nova (agy) is no longer allowed outside the jail.");
+    expect(feed.body.map((i) => i.title)).toContain("Nova (agy) must run with Oathrion's protection again.");
   });
 
   it("arrêter : seulement un agent que la veille voit dehors à l'instant, jamais un processus quelconque", async () => {

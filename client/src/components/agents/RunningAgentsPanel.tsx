@@ -21,11 +21,11 @@ const QUERY_KEY = ["/api/local/agents/running"] as const;
 type State = "jailed" | "paused" | "allowed" | "once" | "outside";
 
 const STATE: Record<State, { label: string; badge: string; line: (agent: string) => string }> = {
-  jailed: { label: "In the jail", badge: "bg-emerald-500/15 text-emerald-700 ring-1 ring-inset ring-emerald-500/25 dark:text-emerald-300", line: () => "It cannot go around Oathrion." },
-  paused: { label: "Paused", badge: "bg-red-500/15 text-red-600 ring-1 ring-inset ring-red-500/30 dark:text-red-300", line: () => "It was running outside the jail. Nothing it was doing is lost." },
-  outside: { label: "Outside the jail", badge: "bg-amber-500/15 text-amber-700 dark:text-amber-400", line: () => "It can go around Oathrion." },
-  once: { label: "Resumed this time", badge: "bg-muted text-muted-foreground", line: () => "Its next start outside the jail is paused again." },
-  allowed: { label: "Allowed outside", badge: "bg-muted text-muted-foreground", line: () => "You allowed it outside the jail." },
+  jailed: { label: "Protected", badge: "bg-emerald-500/15 text-emerald-700 ring-1 ring-inset ring-emerald-500/25 dark:text-emerald-300", line: () => "It cannot go around Oathrion." },
+  paused: { label: "Paused", badge: "bg-red-500/15 text-red-600 ring-1 ring-inset ring-red-500/30 dark:text-red-300", line: () => "It was running without Oathrion's protection. Nothing it was doing is lost." },
+  outside: { label: "Not protected", badge: "bg-amber-500/15 text-amber-700 dark:text-amber-400", line: () => "It can go around Oathrion." },
+  once: { label: "Resumed this time", badge: "bg-muted text-muted-foreground", line: () => "Next time it starts without Oathrion's protection, it is paused again." },
+  allowed: { label: "Allowed without Oathrion", badge: "bg-muted text-muted-foreground", line: () => "You let it run without Oathrion's protection." },
 };
 
 const stateOf = (agent: RunningAgent): State => (agent.jailed ? "jailed" : agent.paused ? "paused" : agent.allowedOutside ? "allowed" : agent.allowedOnce ? "once" : "outside");
@@ -70,9 +70,9 @@ export function RunningAgentsPanel() {
       await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
       await queryClient.invalidateQueries({ queryKey: ["/api/local/feed"] });
       toast({
-        title: what === "stop" ? `${group.agent} stopped` : what === "allow" ? `${group.agent} allowed outside the jail` : `${group.agent} is no longer allowed outside the jail`,
+        title: what === "stop" ? `${group.agent} stopped` : what === "allow" ? `${group.agent} may run without Oathrion's protection` : `${group.agent} must run with Oathrion's protection again`,
         description:
-          what === "stop" ? `Start it again with « oathrion jail -- ${group.agent} ».` : what === "allow" ? "It goes on where it was. « Stop allowing », here, undoes it." : "Started outside the jail, it is paused again.",
+          what === "stop" ? `Start it again protected: « oathrion jail -- ${group.agent} ».` : what === "allow" ? "It goes on where it was. « Stop allowing », here, undoes it." : "Started without Oathrion's protection, it is paused again.",
       });
     } catch (error) {
       toast({ title: "That did not work", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
@@ -83,7 +83,7 @@ export function RunningAgentsPanel() {
 
   return (
     <section className="space-y-2 rounded-2xl border border-card-border bg-card p-5 text-sm" data-testid="running-agents">
-      <h2 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">Running now</h2>
+      <h2 className="text-[13px] font-semibold text-muted-foreground">Running now</h2>
       {groups.length === 0 ? (
         <p className="text-muted-foreground">No AI agent is running on this machine right now.</p>
       ) : (
@@ -99,7 +99,7 @@ export function RunningAgentsPanel() {
                       type="button"
                       onClick={() => setPicking(group.agent)}
                       title="Choose its mascot and its name"
-                      className="oath-glow flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-background/40 transition-transform hover:scale-105"
+                      className="oath-glow flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-background/40"
                       style={glowOf(group.mascot.id, group.state === "paused")}
                       data-testid={`button-customize-running-${group.agent}`}
                     >
@@ -156,10 +156,6 @@ export function RunningAgentsPanel() {
       {trip && trip.events.length > 0 ? (
         <p className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive" data-testid="decoys-read">
           A decoy was read: no honest task reads it. See « What happened ».
-        </p>
-      ) : trip && trip.decoys === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          Lay decoys: <code className="font-mono">oathrion decoys plant</code> puts fake secrets on this machine, and you are told when anything reads one.
         </p>
       ) : null}
       <MascotPicker agent={picking} onClose={() => setPicking(null)} />

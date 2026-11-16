@@ -29,6 +29,8 @@ export interface DecisionView {
   judged: boolean;
   /** La phrase à partager, avant même d'avoir décidé (un leurre lu), ou après. */
   share: string | null;
+  /** L'action en jeu, pour une demande d'approbation : la page montre son reçu signé une fois décidée. */
+  executionId: string | null;
 }
 
 interface Pending {
@@ -79,6 +81,7 @@ export class DecisionDesk {
       done: item.done,
       judged: item.judged,
       share: item.done?.share ?? given,
+      executionId: event.type === "approval.requested" ? event.executionId : null,
     };
   }
 

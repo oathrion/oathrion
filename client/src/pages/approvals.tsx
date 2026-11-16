@@ -1,6 +1,6 @@
 import { contextLabel, reasonLabel } from "@/lib/server-text";
 import { useMemo, useState } from "react";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { AlertTriangle, Check, Inbox, X } from "lucide-react";
 import {
   EmptyState,
@@ -13,7 +13,7 @@ import { ApprovalStatusBadge, RiskBadge } from "@/components/common/badges";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useARIA, useFreshSnapshot, useLiveApprovals } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
-import { grantAlways } from "@/lib/api";
+import { grantAlways, grantHour } from "@/lib/api";
 import { useLocalMode } from "@/lib/local-mode";
 import { glowOf } from "@/lib/mascot-style";
 import { useFaces } from "@/components/agents/MascotPicker";
@@ -24,6 +24,7 @@ import { describeApproval } from "@/lib/approval-text";
 import type { Approval, ApprovalStatus } from "@/types";
 import { WithheldToolsNotice } from "@/components/agents/WithheldToolsNotice";
 import { RunningAgentsPanel } from "@/components/agents/RunningAgentsPanel";
+import { ReceiptMoment } from "@/components/receipts/ReceiptMoment";
 import { UnknownProgramsNotice } from "@/components/agents/UnknownProgramsNotice";
 
 type Filter = "pending" | "approved" | "rejected" | "all";
@@ -35,6 +36,15 @@ export default function ApprovalsPage() {
   const { can } = useAuth();
   const [filter, setFilter] = useState<Filter>("pending");
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+  /*
+   * Les reçus qui viennent de naître, en haut de la page (en local : l'action a un reçu signé).
+   * `?receipt=<action>` : le bouton « Your signed receipt » de la fenêtre de notification y mène.
+   */
+  const search = useSearch();
+  const [receipts, setReceipts] = useState<string[]>(() => {
+    const asked = new URLSearchParams(search).get("receipt");
+    return asked ? [asked] : [];
+  });
   const { toast } = useToast();
   const canApprove = can("approve");
   /* « Décider une fois » : en local, et pour qui peut écrire une règle. */
@@ -62,10 +72,13 @@ export default function ApprovalsPage() {
     setResolvingId(approval.id);
     try {
       await resolveApproval(approval.id, status);
-      toast({
-        title: status === "approved" ? "Action approved" : "Action rejected",
-        description: describeApproval(approval).headline,
-      });
+      const ref = local ? approval.executionId : null;
+      if (ref) setReceipts((shown) => [ref, ...shown.filter((r) => r !== ref)]);
+      else
+        toast({
+          title: status === "approved" ? "Action approved" : "Action rejected",
+          description: describeApproval(approval).headline,
+        });
     } catch {
       toast({
         title: "The decision could not be recorded",
@@ -91,10 +104,33 @@ export default function ApprovalsPage() {
         return;
       }
       await resolveApproval(approval.id, "approved");
+      const ref = approval.executionId;
+      if (ref) setReceipts((shown) => [ref, ...shown.filter((r) => r !== ref)]);
       toast({
         title: "Approved — this tool will not be asked again",
         description: 'An "allowed without approval" rule, in Policies, where you can remove it.',
       });
+    } catch {
+      toast({ title: "The decision could not be recorded", description: "Oathrion did not accept this decision.", variant: "destructive" });
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
+  /* « Allow 1 hour » : la permission d'abord, puis l'approbation de CETTE demande, et son reçu. */
+  const resolveHour = async (approval: Approval) => {
+    if (!canApprove || resolvingId) return;
+    setResolvingId(approval.id);
+    try {
+      const granted = await grantHour(approval.id);
+      if (!granted.ok) {
+        toast({ title: "No hour for this action", description: granted.message, variant: "destructive" });
+        return;
+      }
+      await resolveApproval(approval.id, "approved");
+      const ref = approval.executionId;
+      if (ref) setReceipts((shown) => [ref, ...shown.filter((r) => r !== ref)]);
+      toast({ title: `Allowed until ${granted.clock}`, description: `${describeApproval(approval).headline}: not asked again for an hour.` });
     } catch {
       toast({ title: "The decision could not be recorded", description: "Oathrion did not accept this decision.", variant: "destructive" });
     } finally {
@@ -110,8 +146,6 @@ export default function ApprovalsPage() {
       />
 
       <UnknownProgramsNotice />
-      <RunningAgentsPanel />
-      <WithheldToolsNotice />
 
       <FilterTabs<Filter>
         value={filter}
@@ -123,6 +157,14 @@ export default function ApprovalsPage() {
           { value: "all", label: "All", count: counts.all },
         ]}
       />
+
+      {receipts.length > 0 ? (
+        <div className="space-y-4" data-testid="receipts-just-made">
+          {receipts.map((ref) => (
+            <ReceiptMoment key={ref} executionRef={ref} onClose={() => setReceipts((shown) => shown.filter((r) => r !== ref))} />
+          ))}
+        </div>
+      ) : null}
 
       {error ? (
         <ErrorState message={error} onRetry={reload} />
@@ -166,6 +208,7 @@ export default function ApprovalsPage() {
                 resolving={resolvingId === a.id}
                 onResolve={resolve}
                 onAlways={canGrant && toolOf(a) !== null ? resolveAlways : undefined}
+                onHour={local && canApprove && toolOf(a) !== null ? resolveHour : undefined}
                 approvedInARow={canGrant ? decideOnceSuggestion(a, approvals) : null}
               />
             ))}
@@ -175,20 +218,28 @@ export default function ApprovalsPage() {
                 {filtered
                   .filter((a) => a.status !== "pending")
                   .map((a) => (
-                    <DecidedRow key={a.id} approval={a} />
+                    <DecidedRow key={a.id} approval={a} withReceipt={local} />
                   ))}
               </ul>
             </Surface>
           )}
         </div>
       )}
+
+      {/*
+       * Sous les demandes, pas au-dessus (16 novembre) : ces bandeaux arrivent après le
+       * chargement ; au-dessus, ils poussaient la carte au moment du clic, et « Reject » tombait
+       * à côté — ou sur un autre bouton.
+       */}
+      <RunningAgentsPanel />
+      <WithheldToolsNotice />
     </div>
   );
 }
 
 function Avatar({ name }: { name: string }) {
   return (
-    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-muted to-secondary text-[15px] font-semibold text-foreground/80 shadow-xs" aria-hidden>
+    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-[15px] font-semibold text-foreground/80 shadow-xs" aria-hidden>
       {name.trim().charAt(0).toUpperCase() || "?"}
     </span>
   );
@@ -203,19 +254,40 @@ function expiresIn(expiresAt: string | null | undefined): string | null {
 }
 
 /** Une demande déjà tranchée : une ligne, comme une entrée d'historique. */
-function DecidedRow({ approval }: { approval: Approval }) {
+function DecidedRow({ approval, withReceipt }: { approval: Approval; withReceipt: boolean }) {
   const text = describeApproval(approval);
+  const [open, setOpen] = useState(false);
+  /* En local, chaque décision a son reçu signé : il se rouvre ici, tel qu'il est né. */
+  const ref = withReceipt && approval.status !== "expired" ? approval.executionId : null;
   return (
-    <li className="flex items-center gap-4 px-5 py-4" data-testid={`card-approval-${approval.id}`}>
-      <Avatar name={approval.agentName} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-medium">{text.headline}</p>
-        <p className="truncate text-[13px] text-muted-foreground">
-          {text.where ? `${text.where} · ` : ""}
-          {approval.status === "expired" ? "nobody decided in time" : `by ${approval.resolvedBy ?? "—"}`} · {relativeTime(approval.resolvedAt ?? approval.requestedAt)}
-        </p>
+    <li data-testid={`card-approval-${approval.id}`}>
+      <div className="flex items-center gap-4 px-5 py-4">
+        <Avatar name={approval.agentName} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15px] font-medium">{text.headline}</p>
+          <p className="truncate text-[13px] text-muted-foreground">
+            {text.where ? `${text.where} · ` : ""}
+            {approval.status === "expired" ? "nobody decided in time" : `by ${approval.resolvedBy ?? "—"}`} · {relativeTime(approval.resolvedAt ?? approval.requestedAt)}
+          </p>
+        </div>
+        <ApprovalStatusBadge status={approval.status} />
+        {ref ? (
+          <button
+            type="button"
+            onClick={() => setOpen((shown) => !shown)}
+            aria-expanded={open}
+            className="shrink-0 rounded-full px-3 py-1 text-[13px] font-medium text-foreground/80 hover:bg-muted"
+            data-testid={`button-receipt-${approval.id}`}
+          >
+            {open ? "Hide receipt" : "Receipt"}
+          </button>
+        ) : null}
       </div>
-      <ApprovalStatusBadge status={approval.status} />
+      {ref && open ? (
+        <div className="px-5 pb-5">
+          <ReceiptMoment executionRef={ref} />
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -226,6 +298,7 @@ function ApprovalCard({
   resolving,
   onResolve,
   onAlways,
+  onHour,
   approvedInARow = null,
 }: {
   approval: Approval;
@@ -234,6 +307,7 @@ function ApprovalCard({
   onResolve: (a: Approval, status: Exclude<ApprovalStatus, "pending" | "expired">) => void;
   /** « Décider une fois » (console locale) : approuver, et ne plus demander pour cet outil. */
   onAlways?: (a: Approval) => void;
+  onHour?: (a: Approval) => void;
   /** Approbations de suite du même outil : au-delà du seuil, on propose de décider une fois. */
   approvedInARow?: number | null;
 }) {
@@ -316,6 +390,16 @@ function ApprovalCard({
           >
             <X className="h-4 w-4" aria-hidden /> Reject
           </button>
+          {onHour && (
+            <button
+              disabled={resolving}
+              onClick={() => onHour(approval)}
+              data-testid={`button-approve-hour-${approval.id}`}
+              className="inline-flex h-9 items-center rounded-full px-4 text-[14px] font-medium text-foreground/80 transition-colors hover:bg-muted disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              Allow 1 hour
+            </button>
+          )}
           {onAlways && (
             <button
               disabled={resolving}

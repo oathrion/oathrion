@@ -1675,6 +1675,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }),
   );
 
+  /* « Allow 1 hour » depuis la console : la permission d'une heure (`local-hour-passes.ts`) ; la console approuve ensuite la demande. */
+  app.post(
+    "/api/local/hour-pass",
+    requireCapability("approve"),
+    handle(async (req, res) => {
+      const hub = activeHub();
+      if (!isLocalMode() || !hub) return fail(res, 404, "Not found");
+      const approvalId = typeof (req.body as { approvalId?: unknown })?.approvalId === "string" ? (req.body as { approvalId: string }).approvalId : "";
+      const { repositories } = scope(req);
+      const approval = await repositories.approvals.findById(approvalId);
+      const execution = approval?.executionId ? await repositories.executions.findById(approval.executionId) : undefined;
+      const { HourPasses, passable, untilClock } = await import("./local-hour-passes");
+      if (!approval || !execution || !passable(execution.action)) return fail(res, 404, "Only a tool of a server behind Oathrion can be allowed for an hour.");
+      const pass = new HourPasses(hub.dir).grant(approval.agentId, execution.action);
+      res.json({ until: pass.until, clock: untilClock(pass) });
+    }),
+  );
+
   /*
    * POST /api/local/hub — l'administration du PIVOT local par ses relais et ses consoles
    * (`server/local-hub.ts`). N'existe que si ce processus est un pivot (404 sinon). Chaque

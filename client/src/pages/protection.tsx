@@ -73,7 +73,7 @@ export default function ProtectionPage() {
         <>
           <Surface className="oath-glow space-y-5 p-6" style={glowOf("warden", covered !== total && data.counts.bypasses > 0)} data-testid="protection-summary">
             <div className="flex items-center gap-5">
-              <Logo className="h-16 w-16 shrink-0 drop-shadow-[0_0_22px_rgba(150,62,255,0.55)]" />
+              <Logo className="h-16 w-16 shrink-0" />
               <div>
                 <p className="text-[13px] font-medium text-muted-foreground">On this machine</p>
                 <h2 className="mt-1 text-[24px] font-semibold leading-tight tracking-[-0.022em]">
@@ -109,7 +109,7 @@ export default function ProtectionPage() {
           </Surface>
           {data.agents.map((agent) => (
             <section key={agent.client} className="space-y-2" data-testid={`protection-agent-${agent.client}`}>
-              <h2 className="px-1 text-[13px] font-semibold uppercase tracking-[0.04em] text-muted-foreground">{agent.client}</h2>
+              <h2 className="px-1 text-[13px] font-semibold text-muted-foreground">{agent.client}</h2>
               <Surface className="overflow-hidden p-0">
                 <ul className="divide-y divide-card-border">
                   {agent.items.map((item) => (

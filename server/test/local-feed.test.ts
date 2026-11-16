@@ -49,10 +49,10 @@ describe("le fil", () => {
     expect(feed.map((i) => i.title)).toEqual([
       "Oathrion blocked Nova (agy): delete file.",
       "Nova (agy) did 2 things through Oathrion: read file, list directory.",
-      "Ember (Claude Code) asked before acting; you approved.",
+      "Ember (Claude Code) asked to write file; you approved.",
       "Something read one of your decoys: no honest task does that.",
       "You stopped Nova (agy).",
-      "Nova (agy) was paused: it was running outside Oathrion's jail.",
+      "Nova (agy) was paused: it was running without Oathrion's protection.",
     ]);
     expect(feed.find((i) => i.id === "evt_1")).toMatchObject({ mascot: { id: "nova", name: "Nova" }, tone: "warn", detail: "/home/p/.local/bin/agy (process 108044)" });
   });

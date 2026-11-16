@@ -48,8 +48,10 @@ describe.skipIf(!ready || process.platform !== "linux")("prévenir l'approbateur
 
     await until(() => existsSync(opened), 15_000, "la console ouverte par « Décider »");
     const args = readFileSync(notified, "utf8");
-    expect(args).toContain('Cursor wants to use "create_note"');
-    expect(args).toContain('Server "carnet".');
+    /* Quoi, sur quoi, et pourquoi (16 novembre) : les mots de la console. */
+    expect(args).toContain("Cursor wants to create note on the carnet server");
+    expect(args).toContain("“à approuver”");
+    expect(args).toMatch(/Why: your rule “carnet: every write waits for approval”\./);
     /* La notification qui décide : « Approve » / « Reject », et le corps qui ouvre la console. */
     expect(args).toContain("--action=approve=Approve");
     expect(args).toContain("--action=reject=Reject");
@@ -124,7 +126,7 @@ describe.skipIf(!ready || process.platform !== "linux")("prévenir l'approbateur
 
     await client.ask("tools/call", { name: "create_note", arguments: { text: "question ignorée" } });
     await until(() => existsSync(notified), 10_000, "la notification après le délai");
-    expect(readFileSync(notified, "utf8")).toContain('Claude Code wants to use "create_note"');
+    expect(readFileSync(notified, "utf8")).toContain("Claude Code wants to create note on the carnet server");
     expect(await client.close()).toBe(0);
   }, 60_000);
 });

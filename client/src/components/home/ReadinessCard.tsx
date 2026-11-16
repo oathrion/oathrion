@@ -127,7 +127,7 @@ export function ReadinessCard() {
     <Surface className="oath-glow relative overflow-hidden p-5" style={glowOf("nova")} data-testid="readiness">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-[17px] font-semibold tracking-tight">
-          Ready at {done}/{required.length}
+          Setting up: {done} of {required.length} done
         </h2>
         <button
           type="button"

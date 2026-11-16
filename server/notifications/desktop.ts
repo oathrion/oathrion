@@ -24,8 +24,10 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 
+import type { NotificationWords } from "@shared/approval-text";
 import { SHARE_NETWORKS, type ShareNetwork } from "@shared/share";
 
+import { passable } from "../local-hour-passes";
 import type { DeliveryResult, NotificationChannel, NotificationEvent, NotificationEventType } from "./types";
 import type { PopupSpec } from "./popup";
 
@@ -102,6 +104,11 @@ export interface DesktopChannelOptions {
    * rend alors `{ text, share }`).
    */
   onShare?: (event: NotificationEvent, network: ShareNetwork, sentence: string) => void;
+  /**
+   * « Your signed receipt » dans notre fenêtre, après une approbation tranchée (16 novembre) : la
+   * console s'ouvre sur le reçu signé de cette action (`components/receipts/ReceiptMoment.tsx`).
+   */
+  onReceipt?: (event: NotificationEvent) => void;
   /** Windows : l'adresse qu'ouvre le bouton « Décider » (à usage unique, fabriquée par le pivot). */
   decideUrl?: (event?: NotificationEvent) => string;
 }
@@ -122,17 +129,33 @@ export function wrappedParts(action: unknown): { server: string; tool: string } 
   return match ? { server: match[1]!, tool: match[2]! } : null;
 }
 
-/** Ce que dit la notification : qui veut quoi, en une ligne, et où décider. */
-export function desktopText(event: NotificationEvent): { title: string; body: string } {
-  /* Plusieurs demandes rapprochées, en une seule notification (`notifications/coalesce.ts`). */
+/** Les mots d'une demande (`shared/approval-text.ts`), s'ils sont là et bien formés. */
+function wordsOf(event: NotificationEvent): NotificationWords | null {
+  const words = event.data.words as Partial<NotificationWords> | undefined;
+  return words && typeof words.headline === "string" ? { headline: words.headline, content: typeof words.content === "string" ? words.content : null, why: typeof words.why === "string" ? words.why : null } : null;
+}
+
+/**
+ * Ce que dit la notification : qui veut faire quoi, sur quoi exactement, et pourquoi Oathrion
+ * demande (16 novembre, retour des premiers testeurs : sans le quoi ni le pourquoi, on approuve
+ * sans lire). `content: false` : sans le contenu (les arguments peuvent être privés) — pour le
+ * téléphone, dont les messages passent par Telegram.
+ */
+export function desktopText(event: NotificationEvent, { content = true }: { content?: boolean } = {}): { title: string; body: string } {
+  /* Plusieurs demandes rapprochées, en une seule notification (`notifications/coalesce.ts`) : la liste, pas un renvoi à la console. */
   if (typeof event.data.grouped === "number") {
-    return { title: `${String(event.data.grouped)} requests are waiting for your decision`.slice(0, 120), body: `${event.summary} Decide in Oathrion's console.`.slice(0, 300) };
+    const lines = Array.isArray(event.data.headlines) ? event.data.headlines.filter((h): h is string => typeof h === "string") : [];
+    const more = event.data.grouped - Math.min(lines.length, 3);
+    const body = lines.length > 0 ? [...lines.slice(0, 3).map((line) => `· ${line}`), ...(more > 0 ? [`· and ${String(more)} more`] : []), "Decide each one in Oathrion's console."].join("\n") : `${event.summary} Decide in Oathrion's console.`;
+    return { title: `${String(event.data.grouped)} requests are waiting for your decision`.slice(0, 120), body: body.slice(0, 300) };
   }
+  const words = wordsOf(event);
+  const why = words?.why ? `Why: ${words.why}.` : null;
   /* Une commande de Claude Code envoyée par son hook (mode automatique) : la commande elle-même, pas « shell ». */
   if (typeof event.data.action === "string" && event.data.action.startsWith("mcp.claude-code.")) {
     const command = typeof event.data.command === "string" ? event.data.command : String(event.data.target ?? "").replace(/^file:\/\//, "");
     const verb = event.data.action.endsWith(".file_write") ? "write" : "run";
-    return { title: `Claude Code wants to ${verb}: ${command}`.slice(0, 120), body: "It is in auto mode, so Oathrion asks you. Your approval is needed before it runs.".slice(0, 300) };
+    return { title: `Claude Code wants to ${verb}: ${command}`.slice(0, 120), body: (why ?? "It is in auto mode, so Oathrion asks you. Your approval is needed before it runs.").slice(0, 300) };
   }
   /*
    * Une alerte du pivot qui porte son propre titre (un agent mis en pause, un leurre lu, la
@@ -142,13 +165,22 @@ export function desktopText(event: NotificationEvent): { title: string; body: st
   if (event.data.custom === true) {
     return { title: event.title.slice(0, 120), body: event.summary.slice(0, 300) };
   }
-  /* Un programme jamais vu (`server/local-programs.ts`) : ce qu'il dit être, et ce qu'on sait de lui. */
+  /*
+   * Un programme jamais vu (`server/local-programs.ts`). 16 novembre, retour des premiers
+   * testeurs (« pourquoi Oathrion a bloqué ? ») : la question qu'on pose vraiment, et que c'est
+   * normal, une fois par programme ; le chemin et l'empreinte restent dans la console.
+   */
   if (event.data.unknownProgram === true) {
     const here = Array.isArray(event.data.actions) && event.data.actions.length > 0;
     return {
-      title: (typeof event.data.title === "string" ? event.data.title : "A program Oathrion has never seen wants to use your servers").slice(0, 120),
-      body: `It says it is "${event.agentName}": ${String(event.data.description ?? "")}. ${here ? "Confirm it or block it here." : "Confirm it or block it in Oathrion's console."}`.slice(0, 300),
+      title: (typeof event.data.title === "string" ? event.data.title : `First time Oathrion meets "${event.agentName}": is it yours?`).slice(0, 120),
+      body: `Nothing it asks goes through until you answer: Oathrion checks each program once, the first time. If you just started ${event.agentName}, it is yours. ${here ? "Confirm it or block it here." : "Confirm it or block it in Oathrion's console."}`.slice(0, 300),
     };
+  }
+  /* Une demande d'approbation : les mots de la console (« claude-code wants to create note on the carnet server »). */
+  if (words && event.type === "approval.requested") {
+    const said = content && words.content ? `“${words.content}”` : null;
+    return { title: words.headline.slice(0, 120), body: ([said, why].filter(Boolean).join("\n") || "Your approval is needed before the action runs.").slice(0, 300) };
   }
   const parts = wrappedParts(event.data.action);
   const title = parts ? `${event.agentName} wants to use "${parts.tool}"` : `${event.agentName} is waiting for your decision`;
@@ -197,6 +229,8 @@ export function notificationActions(event: NotificationEvent): { id: string; lab
     return [
       { id: "approve", label: "Approve" },
       { id: "reject", label: "Reject" },
+      /* Un outil d'un serveur derrière Oathrion : une heure sans redemander (`local-hour-passes.ts`). */
+      ...(passable(event.data.action) ? [{ id: "allow-hour", label: "Allow 1 hour" }] : []),
     ];
   }
   return [];
@@ -355,10 +389,13 @@ export class DesktopChannel implements NotificationChannel {
             const { text, share } = doneOf(await this.options.onAction?.(event, message.choice as string));
             decision = text;
             if (share && this.options.onShare) sentence = share;
-            child.stdin?.write(`${JSON.stringify({ done: decision, ...(sentence && this.options.onShare ? { share: sentence } : {}) })}\n`);
+            const receipt = event.type === "approval.requested" && event.executionId !== null && this.options.onReceipt !== undefined;
+            child.stdin?.write(`${JSON.stringify({ done: decision, ...(sentence && this.options.onShare ? { share: sentence } : {}), ...(receipt ? { receipt: true } : {}) })}\n`);
           })().catch(() => undefined);
         } else if (message.feedback === "right" || message.feedback === "wrong") {
           this.options.onFeedback?.(event, message.feedback === "right", decision);
+        } else if (message.open === "receipt" && decision !== "") {
+          this.options.onReceipt?.(event);
         } else if (message.open === true) {
           /* Notre fenêtre a déjà ses boutons : le corps ouvre la console, pas la décision une seconde fois. */
           this.options.onDecide?.(event.approvalId);

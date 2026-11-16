@@ -111,7 +111,7 @@ export default function IntegrationsPage() {
           if (rows.length === 0) return null;
           return (
             <section key={category} className="space-y-3">
-              <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <h2 className="text-xs font-medium text-muted-foreground">
                 {CATEGORY_LABEL[category]}
               </h2>
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

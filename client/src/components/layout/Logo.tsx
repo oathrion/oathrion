@@ -18,7 +18,7 @@ export function Logo({ className = "h-6 w-6" }: { className?: string }) {
 export function LogoLockup() {
   return (
     <div className="flex items-center gap-2.5">
-      <Logo className="h-7 w-7 drop-shadow-[0_0_10px_rgba(150,62,255,0.45)]" />
+      <Logo className="h-7 w-7" />
       <span className="text-[15px] font-semibold tracking-tight">Oathrion</span>
     </div>
   );

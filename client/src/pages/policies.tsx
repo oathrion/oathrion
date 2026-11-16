@@ -409,7 +409,7 @@ function NewPolicyDialog({
           </div>
 
           <div className="rounded-lg border border-card-border bg-muted/50 px-3 py-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <p className="text-xs font-medium text-muted-foreground">
               Compiled rule
             </p>
             <code

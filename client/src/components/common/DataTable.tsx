@@ -35,7 +35,7 @@ export function DataTable<T extends { id: string }>({
                 key={c.key}
                 scope="col"
                 className={cn(
-                  "px-5 py-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground",
+                  "px-5 py-2.5 text-xs font-medium text-muted-foreground",
                   c.align === "right" ? "text-right" : "text-left",
                   c.className,
                 )}

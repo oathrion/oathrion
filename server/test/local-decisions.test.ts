@@ -69,7 +69,7 @@ describe("la décision dans la console", () => {
   it("une approbation reçoit Approve / Reject, avec les mots de la notification", () => {
     const { d } = desk();
     const id = d.keep(paused({ id: "ntf_1", approvalId: "apr_1", data: { action: "mcp.fichiers.write_file" } }));
-    expect(d.view(id!)).toMatchObject({ title: 'demo wants to use "write_file"', actions: [{ id: "approve" }, { id: "reject" }] });
+    expect(d.view(id!)).toMatchObject({ title: 'demo wants to use "write_file"', actions: [{ id: "approve" }, { id: "reject" }, { id: "allow-hour" }] });
   });
 
   it("rien à décider, rien à garder", () => {

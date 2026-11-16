@@ -43,11 +43,11 @@ function Hero({ items }: { items: FeedItem[] }) {
   return (
     <Surface className="oath-glow relative overflow-hidden p-6" style={glowOf("warden", alerts > 0)} data-testid="home-hero">
       <div className="flex flex-wrap items-center gap-6">
-        <img src="/mascots/warden.png" alt="Warden" className="h-24 w-24 shrink-0 object-contain drop-shadow-[0_10px_30px_rgba(80,92,255,0.45)]" />
+        <img src="/mascots/warden.png" alt="Warden" className="h-24 w-24 shrink-0 object-contain" />
         {/* Une largeur minimale : sur un écran étroit, ce sont les chiffres qui passent dessous, pas le titre qui s'écrase. */}
         <div className="min-w-[15rem] flex-1">
           <p className="text-[13px] font-medium text-muted-foreground">Today, on this machine</p>
-          <h2 className="mt-1 text-[26px] font-semibold leading-tight tracking-[-0.025em]">{headline}</h2>
+          <h2 className="mt-1 font-serif text-[26px] font-medium leading-tight">{headline}</h2>
           {/* La démo n'est plus proposée ici : la carte « Ready » juste en dessous a son bouton « Show me ». */}
         </div>
         <dl className="flex gap-3">
@@ -91,7 +91,7 @@ export default function HomePage() {
       <ReadinessCard />
       <RunningAgentsPanel />
       <section className="space-y-3" data-testid="feed">
-        <h2 className="px-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">What happened</h2>
+        <h2 className="px-1 text-[13px] font-semibold text-muted-foreground">What happened</h2>
         {feed.isLoading ? (
           <TableSkeleton rows={4} />
         ) : feed.isError ? (
@@ -109,7 +109,7 @@ export default function HomePage() {
             {feed.data.map((item) => (
               <li key={item.id}>
                 <Surface
-                  className={cn("flex items-center gap-4 p-3.5 pr-4 transition-transform hover:-translate-y-px", item.tone === "bad" && "oath-glow")}
+                  className={cn("flex items-center gap-4 p-3.5 pr-4", item.tone === "bad" && "oath-glow")}
                   style={item.tone === "bad" ? glowOf(item.mascot.id, true) : undefined}
                   data-testid={`feed-item-${item.id}`}
                 >

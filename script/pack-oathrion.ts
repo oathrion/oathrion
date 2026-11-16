@@ -102,11 +102,12 @@ cpSync(join(ROOT, "dist/public"), join(OUT, "public"), { recursive: true });
   while (queue.length > 0) {
     const file = queue.shift()!;
     const text = readFileSync(join(publicDir, file), "utf8");
-    for (const match of text.matchAll(/(?:\/|\.\/)?(assets\/[\w.-]+\.(?:js|css))|["'`]\.\/([\w.-]+\.(?:js|css))["'`]/g)) {
+    /* Les polices (16 novembre) : le CSS les charge par `url(/assets/….woff2)`. Gardées, jamais relues. */
+    for (const match of text.matchAll(/(?:\/|\.\/)?(assets\/[\w.-]+\.(?:js|css|woff2))|["'`]\.\/([\w.-]+\.(?:js|css))["'`]/g)) {
       const target = match[1] ?? (file.startsWith("assets/") ? `assets/${match[2]!}` : match[2]!);
       if (!reachable.has(target) && existsSync(join(publicDir, target))) {
         reachable.add(target);
-        queue.push(target);
+        if (!target.endsWith(".woff2")) queue.push(target);
       }
     }
   }

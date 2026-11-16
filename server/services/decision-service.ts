@@ -18,6 +18,7 @@ import { DEFAULT_CURRENCY, type CurrencyCode } from "@shared/money";
 import { formatAmount, readNumber } from "@shared/policy/matchers";
 import { grantedScopes } from "@shared/agent-scopes";
 import type { Decision, EvaluationResult } from "@shared/policy/types";
+import { notificationWords } from "@shared/approval-text";
 import type { Approval, AuditEntry, Execution } from "@shared/types";
 import type { Repositories } from "../repositories/types";
 import { notifier as defaultNotifier, type Notifier } from "../notifications";
@@ -305,6 +306,8 @@ export class DecisionService {
           requestedValue: approval.requestedValue,
           policyLimit: approval.policyLimit,
           requestedAt: approval.requestedAt,
+          /* Quoi, sur quoi, et pourquoi : les mots de la console, que la notification reprend (`desktopText`). */
+          words: notificationWords(approval, result.policyName),
         },
       });
     } else if (result.decision === "BLOCK") {

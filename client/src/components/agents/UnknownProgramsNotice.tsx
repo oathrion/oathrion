@@ -49,7 +49,7 @@ export function UnknownProgramsNotice() {
         <section key={program.id} className="flex flex-wrap items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm">
           <ShieldQuestion className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
           <div className="min-w-0 flex-1 space-y-1">
-            <p className="font-medium">A program Oathrion has never seen wants to use your servers. It says it is "{program.name}".</p>
+            <p className="font-medium">First time Oathrion meets "{program.name}": is it yours?</p>
             {program.identity ? (
               <p className="break-all font-mono text-xs text-muted-foreground">
                 {program.identity.exe}
@@ -59,7 +59,7 @@ export function UnknownProgramsNotice() {
               <p className="text-xs text-muted-foreground">Its executable could not be read on this system: only the name it gives is known.</p>
             )}
             <p className="text-muted-foreground">
-              Until you confirm it, nothing it asks goes through — not even a read. Confirm it only if you started this program yourself.
+              Nothing it asks goes through until you answer, not even a read: Oathrion checks each program once, the first time. If you just started it, it is yours.
             </p>
           </div>
           {canManage ? (

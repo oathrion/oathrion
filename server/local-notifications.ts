@@ -20,6 +20,7 @@ import { mintLocalLoginTicket } from "@shared/local-login-ticket";
 
 import { shareUrl } from "@shared/share";
 import { mintDecideToken } from "./local-decide-links";
+import { untilClock, type HourPasses } from "./local-hour-passes";
 import type { DecisionDesk } from "./local-decisions";
 import { TelegramPhone } from "./local-telegram";
 
@@ -230,8 +231,10 @@ export function registerLocalNotifications(
     secret: string;
     desktopAllowed: boolean;
     inClient?: InClientGrace;
-    /** Trancher une approbation depuis la notification, par la même voie que la console. */
-    decideApproval?: (approvalId: string, status: "approved" | "rejected") => Promise<string>;
+    /** Trancher une approbation depuis la notification, par la même voie que la console ; `by` : au nom de qui. */
+    decideApproval?: (approvalId: string, status: "approved" | "rejected", by?: string) => Promise<string>;
+    /** « Allow 1 hour » : les permissions d'une heure (`local-hour-passes.ts`). */
+    passes?: HourPasses;
     /** L'image d'Oathrion (en attendant la mascotte de chaque agent). */
     image?: string;
     /** Pour les essais : un faux lanceur de `notify-send` (rien ne s'affiche). */
@@ -256,6 +259,33 @@ export function registerLocalNotifications(
   /* Ce que fait chaque bouton, et de quoi parle le feedback, par notification envoyée. */
   const choices = new Map<string, { onChoice: (actionId: string) => Promise<Done> | Done; about: string }>();
   const abouts = new Map<string, string>();
+  /*
+   * Une demande couverte par une permission d'une heure : le pivot l'approuve lui-même, au nom
+   * de cette permission, et personne n'est dérangé (ni l'ordinateur, ni le téléphone).
+   */
+  const allowedBy = (event: NotificationEvent) =>
+    options.passes && event.type === "approval.requested" && event.approvalId ? options.passes.covers(event.agentId, event.data.action) : null;
+  const released = new Set<string>();
+  if (options.passes && options.decideApproval) {
+    const decide = options.decideApproval;
+    target.register({
+      id: "hour-pass",
+      handles: (type) => type === "approval.requested",
+      deliver: async (event) => {
+        const at = new Date().toISOString();
+        const pass = allowedBy(event);
+        if (!pass || !event.approvalId || released.has(event.approvalId)) return { channelId: "hour-pass", eventId: event.id, at, ok: true, detail: "no permission" };
+        released.add(event.approvalId);
+        const done = await decide(event.approvalId, "approved", `your 1-hour permission (until ${untilClock(pass)})`);
+        return { channelId: "hour-pass", eventId: event.id, at, ok: true, detail: done };
+      },
+    });
+  }
+  /** Ne livre pas une demande déjà couverte par une permission d'une heure. */
+  const unlessAllowed =
+    (deliver: (event: NotificationEvent) => Promise<DeliveryResult>, channelId: string) =>
+    async (event: NotificationEvent): Promise<DeliveryResult> =>
+      allowedBy(event) ? { channelId, eventId: event.id, at: new Date().toISOString(), ok: true, detail: "allowed for the hour: no notification" } : deliver(event);
   /* Le bouton agit, et rend ce qui a été fait : la fenêtre l'affiche, puis demande « Was Oathrion right? ». */
   const act = async (event: NotificationEvent, actionId: string): Promise<unknown> => {
     /* « See what happened » : la console, déjà connectée, sur le fil d'actualité. */
@@ -268,6 +298,13 @@ export function registerLocalNotifications(
       choices.delete(event.id);
       abouts.set(event.id, choice.about);
       return choice.onChoice(actionId);
+    }
+    /* « Allow 1 hour » : la permission d'abord, puis l'approbation de CETTE demande. */
+    if (event.approvalId && options.decideApproval && options.passes && actionId === "allow-hour") {
+      const pass = options.passes.grant(event.agentId, String(event.data.action));
+      abouts.set(event.id, `asked you before ${event.agentName} acted`);
+      const done = await options.decideApproval(event.approvalId, "approved");
+      return done.startsWith("Approved") ? `${done}. Allowed without asking until ${untilClock(pass)}` : done;
     }
     /* Une approbation : « Approve » / « Reject », par la même voie que la console. */
     if (event.approvalId && options.decideApproval && (actionId === "approve" || actionId === "reject")) {
@@ -334,7 +371,7 @@ export function registerLocalNotifications(
    * LE TÉLÉPHONE (12 novembre, `local-telegram.ts`) : la machine peut rester à la maison, sans
    * écran — la demande arrive sur Telegram, avec la mascotte et ses boutons, partout.
    */
-  const phone = options.phone === false || process.env.OATHRION_LOCAL_NOTIFY_PHONE === "0" ? null : new TelegramPhone({ dir: options.stateDir, act: actFrom("phone"), feedback, text: desktopText, ...(options.phoneFetch ? { fetchImpl: options.phoneFetch } : {}) });
+  const phone = options.phone === false || process.env.OATHRION_LOCAL_NOTIFY_PHONE === "0" ? null : new TelegramPhone({ dir: options.stateDir, act: actFrom("phone"), feedback, text: (event) => desktopText(event, { content: false }), ...(options.phoneFetch ? { fetchImpl: options.phoneFetch } : {}) });
   if (phone) {
     phone.start();
     process.once("exit", () => phone.stop());
@@ -358,7 +395,7 @@ export function registerLocalNotifications(
     target.register({
       id: "telegram",
       handles: (type) => type === "approval.requested" && phone.configured,
-      deliver: afterGrace(options.inClient, coalesced(toPhone, "telegram", { windowMs: NOTIFICATION_GROUP_MS, pending: options.inClient?.pending }), "telegram"),
+      deliver: unlessAllowed(afterGrace(options.inClient, coalesced(toPhone, "telegram", { windowMs: NOTIFICATION_GROUP_MS, pending: options.inClient?.pending }), "telegram"), "telegram"),
     });
   }
   let desktop: DesktopChannel | null = null;
@@ -395,6 +432,10 @@ export function registerLocalNotifications(
         });
         openBrowser(`${options.baseUrl}/console#/connexion-locale?ticket=${mintLocalLoginTicket(options.secret)}&next=${encodeURIComponent(`/share?t=${token}&to=${network}`)}`);
       },
+      onReceipt: (event) => {
+        if (!event.executionId) return;
+        openBrowser(`${options.baseUrl}/console#/connexion-locale?ticket=${mintLocalLoginTicket(options.secret)}&next=${encodeURIComponent(`/approvals?receipt=${event.executionId}`)}`);
+      },
       /* Windows ouvre une adresse au clic : un jeton à usage unique, échangé contre une connexion neuve. */
       decideUrl: (event) => {
         const kept = event ? options.decisions?.keep(event) : null;
@@ -410,7 +451,7 @@ export function registerLocalNotifications(
     target.register({
       id: channel.id,
       handles: (type) => channel.handles(type) && readNotificationSettings(options.stateDir).desktop !== false,
-      deliver: afterGrace(
+      deliver: unlessAllowed(afterGrace(
         options.inClient,
         coalesced(
           (event) => {
@@ -423,7 +464,7 @@ export function registerLocalNotifications(
           { windowMs: NOTIFICATION_GROUP_MS, pending: options.inClient?.pending },
         ),
         channel.id,
-      ),
+      ), channel.id),
     });
   }
   /*

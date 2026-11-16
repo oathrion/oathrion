@@ -46,7 +46,7 @@ export interface PopupSpec {
   /** Le rang de la fenêtre parmi celles ouvertes (empilées sous la première). */
   slot?: number;
   /** Pour la vérifier : chaque état dessiné hors écran, dans `dir` (alert.png, decided.png, danger.png, card.png). */
-  snapshot?: { dir: string; done?: string; share?: string };
+  snapshot?: { dir: string; done?: string; share?: string; receipt?: boolean };
 }
 
 /** Écrit la fenêtre dans le dossier du pivot ; rend son chemin. */
@@ -424,10 +424,17 @@ class Card:
         self.body.set_text(action["label"] + "…")
         emit({"choice": action["id"]})
 
-    def done(self, text, sentence=None):
+    def done(self, text, sentence=None, receipt=False):
         for child in self.buttons.get_children():
             self.buttons.remove(child)
         self.title.set_text(text or "Done")
+        if receipt:
+            # The decision has its signed receipt: one click opens it in the console.
+            signed = button("Your signed receipt", "oath-btn", lambda _b: emit({"open": "receipt"}), icon("check", "#FFFFFF", 15))
+            signed.set_halign(Gtk.Align.START)
+            self.text.pack_start(signed, False, False, 0)
+            # Under the title, before "Was this right?": the question stays next to its thumbs.
+            self.text.reorder_child(signed, 1)
         self.body.get_style_context().remove_class("oath-body")
         self.body.get_style_context().add_class("oath-ask")
         self.body.set_text("Was this right?")
@@ -504,7 +511,7 @@ def read_hub(source, _condition):
     try:
         message = json.loads(line)
         if "done" in message:
-            card.done(message["done"], message.get("share"))
+            card.done(message["done"], message.get("share"), message.get("receipt") is True)
         elif "settled" in message:
             card.settled(message["settled"])
     except Exception:
@@ -533,7 +540,7 @@ if shot:
         first = (spec.get("actions") or [{"id": "x", "label": "x"}])[0]
         card.decided = first["id"]
         window.show_all()
-        card.done(shot["done"], shot.get("share"))
+        card.done(shot["done"], shot.get("share"), shot.get("receipt") is True)
         save(window, shot["dir"] + "/decided.png")
         if card.picture() is not None:
             card.picture().savev(shot["dir"] + "/card.png", "png", [], [])

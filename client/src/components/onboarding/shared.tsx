@@ -193,7 +193,7 @@ export function StepShell({
 }) {
   return (
     <section aria-labelledby="step-title" className="max-w-3xl">
-      <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">{eyebrow}</p>
+      <p className="text-xs font-medium text-muted-foreground">{eyebrow}</p>
       <h2 id="step-title" className="mt-2 text-2xl font-semibold tracking-tight text-balance">
         {title}
       </h2>

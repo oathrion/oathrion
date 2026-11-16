@@ -44,7 +44,7 @@ export function LocalAgentCards({ agents }: { agents: Agent[] }) {
           return (
             <li
               key={agent.id}
-              className="oath-glow relative flex items-center gap-4 rounded-2xl border border-card-border bg-card p-5 transition-transform hover:-translate-y-0.5"
+              className="oath-glow relative flex items-center gap-4 rounded-2xl border border-card-border bg-card p-5"
               style={glowOf(mascot.id, paused)}
               data-testid={`card-agent-${agent.id}`}
             >
@@ -55,7 +55,7 @@ export function LocalAgentCards({ agents }: { agents: Agent[] }) {
                 className="group relative z-10 shrink-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 data-testid={`button-customize-${agent.id}`}
               >
-                <img src={`/mascots/${mascot.id}.png`} alt={mascot.name} className="h-20 w-20 object-contain drop-shadow-[0_8px_18px_rgba(0,0,0,0.35)] transition-transform group-hover:scale-105" />
+                <img src={`/mascots/${mascot.id}.png`} alt={mascot.name} className="h-20 w-20 object-contain" />
                 <span className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border border-card-border bg-background text-sidebar-primary shadow-sm">
                   <Palette className="h-3.5 w-3.5" aria-hidden="true" />
                 </span>

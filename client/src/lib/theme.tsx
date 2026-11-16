@@ -8,11 +8,15 @@ const ThemeContext = createContext<{ theme: Theme; toggle: () => void }>({
   toggle: () => {},
 });
 
-const STORED = "oathrion-theme";
+/*
+ * Nouvelle clé le 16 novembre : l'ancienne gardait « dark » même sans choix de la personne
+ * (l'effet ci-dessous l'écrit à chaque chargement), ce qui aurait caché le passage au clair.
+ */
+const STORED = "oathrion-theme-2";
 
 /*
- * Sombre d'abord (11 novembre : la console prend l'allure des notifications) ; le choix de la
- * personne, s'il y en a un, est gardé dans ce navigateur.
+ * Clair d'abord (16 novembre : la console prend l'allure du site) ; le choix de la personne,
+ * s'il y en a un, est gardé dans ce navigateur.
  */
 function initialTheme(): Theme {
   try {
@@ -21,11 +25,11 @@ function initialTheme(): Theme {
   } catch {
     /* stockage indisponible : le défaut */
   }
-  return "dark";
+  return "light";
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => (typeof window !== "undefined" ? initialTheme() : "dark"));
+  const [theme, setTheme] = useState<Theme>(() => (typeof window !== "undefined" ? initialTheme() : "light"));
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");

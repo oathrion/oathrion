@@ -106,7 +106,7 @@ export function StatCard({
   return (
     <Surface className="p-5" data-testid={testId}>
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <span className="text-xs font-medium text-muted-foreground">
           {label}
         </span>
         {Icon && (
@@ -300,7 +300,7 @@ export function FilterTabs<T extends string>({
 export function KeyValue({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1 py-3">
-      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
       <dd className="text-sm">{children}</dd>
     </div>
   );

@@ -200,7 +200,7 @@ function Tile({
           : "text-foreground";
   return (
     <div className="bg-card px-5 py-6">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className={`mt-2 text-xl font-semibold tabular ${color}`}>{value}</p>
       <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
     </div>

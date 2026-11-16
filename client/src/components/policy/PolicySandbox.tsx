@@ -386,7 +386,7 @@ export function PolicySandbox() {
           </Field>
 
           <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <p className="text-xs font-medium text-muted-foreground">
               Scenarios
             </p>
             <div className="grid gap-2">
@@ -621,7 +621,7 @@ function Verdict({
 
       {result.matched.length > 1 && (
         <div className="space-y-1.5">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="text-xs font-medium text-muted-foreground">
             Every policy checked
           </p>
           <ul className="space-y-1">

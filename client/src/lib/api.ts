@@ -34,6 +34,7 @@
 
 import { apiRequest, apiRequestAllowingFailure } from "@/lib/queryClient";
 import type { AgentMandate } from "@shared/policy/mandate";
+import type { SharedReceipt } from "@shared/receipt-share";
 import type { Capability, Role } from "@shared/roles";
 import type { RunState } from "@shared/types";
 import type {
@@ -813,6 +814,7 @@ export interface LocalDecision {
   done: { text: string; share?: string } | null;
   judged: boolean;
   share: string | null;
+  executionId: string | null;
 }
 
 export async function getDecision(id: string): Promise<LocalDecision> {
@@ -1209,6 +1211,14 @@ export async function grantAlways(approvalId: string): Promise<{ ok: true } | { 
   return { ok: false, message: body.error ?? body.message ?? `The server answered ${String(res.status)}.` };
 }
 
+/** « Allow 1 hour » : cet agent, cet outil, une heure sans redemander (`server/local-hour-passes.ts`). */
+export async function grantHour(approvalId: string): Promise<{ ok: true; clock: string } | { ok: false; message: string }> {
+  const res = await apiRequestAllowingFailure("POST", "/api/local/hour-pass", { approvalId });
+  if (res.ok) return { ok: true, clock: ((await res.json()) as { clock: string }).clock };
+  const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+  return { ok: false, message: body.error ?? body.message ?? `The server answered ${String(res.status)}.` };
+}
+
 /** Une ligne de la chronologie unique (`server/local-activity.ts`). */
 export type ActivityOutcome =
   | "done"
@@ -1329,6 +1339,12 @@ export async function getLocalSummary(period: "today" | "7d"): Promise<LocalSumm
 export async function getSharedReceipt(ref: string): Promise<string> {
   const res = await apiRequest("GET", `/api/local/receipts/${encodeURIComponent(ref)}/share`);
   return res.text();
+}
+
+/** Le même reçu signé, en JSON : pour le montrer au moment où il naît (`components/receipts/ReceiptMoment.tsx`). */
+export async function getReceipt(ref: string): Promise<SharedReceipt> {
+  const res = await apiRequest("GET", `/api/local/receipts/${encodeURIComponent(ref)}/share?format=json`);
+  return (await res.json()) as SharedReceipt;
 }
 
 /** `GET /api/local/protection` — voir `server/local-protection.ts`. */

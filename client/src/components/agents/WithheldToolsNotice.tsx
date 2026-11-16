@@ -73,17 +73,17 @@ export function WithheldToolsNotice({ agentId }: { agentId?: string }) {
             <EyeOff className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
             <div className="min-w-0 flex-1 space-y-1">
               <p className="font-medium">
-                {entry.tools.length} tool{entry.tools.length > 1 ? "s" : ""} of "{servers}" {entry.tools.length > 1 ? "are" : "is"} hidden from {entry.agentName}:{" "}
+                {entry.agentName} cannot see {entry.tools.length} tool{entry.tools.length > 1 ? "s" : ""} of "{servers}":{" "}
                 <span className="font-mono text-xs">{entry.tools.map((tool) => tool.name).join(", ")}</span>
               </p>
               <p className="text-muted-foreground">
-                {destructive ? "The server declares them destructive: they can overwrite, move, delete or execute. " : ""}
-                Once allowed, they stay under your control: each call will wait for your approval.
+                {destructive ? "They can destroy things: delete, overwrite, move or run. " : ""}
+                If you show {entry.tools.length > 1 ? "them" : "it"} to the agent, every use still waits for your yes.
               </p>
             </div>
             {canManage ? (
               <Button size="sm" disabled={busy === entry.agentId} onClick={() => void allow(entry)} data-testid={`button-allow-withheld-${entry.agentId}`}>
-                {busy === entry.agentId ? "Allowing…" : "Allow them"}
+                {busy === entry.agentId ? "Showing…" : entry.tools.length > 1 ? "Show them" : "Show it"}
               </Button>
             ) : (
               <p className="text-xs text-muted-foreground">A person who manages agents can allow them.</p>

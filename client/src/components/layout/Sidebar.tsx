@@ -182,11 +182,12 @@ export function Sidebar({
                 "group relative flex h-9 items-center gap-3 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
                 collapsed ? "justify-center px-0" : "px-3",
                 active
-                  ? "bg-gradient-to-r from-primary/25 via-primary/10 to-transparent text-sidebar-accent-foreground ring-1 ring-inset ring-primary/25"
-                  : "text-foreground/75 hover:bg-sidebar-accent/60 hover:text-foreground",
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-foreground/70 hover:bg-sidebar-accent/60 hover:text-foreground",
               )}
             >
-              <Icon className={cn("h-4 w-4 shrink-0", active ? "text-sidebar-primary" : "text-muted-foreground group-hover:text-foreground")} aria-hidden />
+              {/* Le menu déplié n'a que des mots : une icône par entrée était le décor « tableau de bord IA » de série. Replié, l'icône reste le seul repère. */}
+              {collapsed ? <Icon className={cn("h-4 w-4 shrink-0", active ? "text-sidebar-primary" : "text-muted-foreground group-hover:text-foreground")} aria-hidden /> : null}
               {!collapsed && <span className="truncate">{label}</span>}
               {!collapsed && badge ? (
                 <span className="ml-auto rounded-full bg-warning-soft px-1.5 py-0.5 text-[11px] font-semibold tabular text-warning">
@@ -204,7 +205,7 @@ export function Sidebar({
             <button
               type="button"
               onClick={() => setDetailsOpen((open) => !open)}
-              className="flex h-8 w-full items-center gap-2 rounded-lg px-3 text-xs font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground"
+              className="flex h-8 w-full items-center gap-2 rounded-lg px-3 text-xs font-medium text-muted-foreground hover:text-foreground"
               aria-expanded={detailsOpen || inDetails}
               data-testid="button-nav-details"
             >
@@ -212,7 +213,7 @@ export function Sidebar({
               Details
             </button>
             {detailsOpen || inDetails
-              ? localDetails.map(({ href, label, icon: Icon }) => {
+              ? localDetails.map(({ href, label }) => {
                   const active = isActive(href);
                   return (
                     <Link
@@ -222,11 +223,10 @@ export function Sidebar({
                       data-testid={`link-nav-${href.slice(1)}`}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "group flex h-8 items-center gap-3 rounded-lg px-3 text-[13px] transition-colors",
+                        "group flex h-8 items-center gap-3 rounded-lg pl-8 pr-3 text-[13px] transition-colors",
                         active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-foreground/60 hover:bg-sidebar-accent/60 hover:text-foreground",
                       )}
                     >
-                      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
                       <span className="truncate">{label}</span>
                     </Link>
                   );
@@ -277,7 +277,7 @@ export function Sidebar({
                 there is nothing truthful to show here and the panel now names
                 the signed-in identity only.
               */}
-              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <p className="text-xs font-medium text-muted-foreground">
                 Signed in
               </p>
             </div>
@@ -327,7 +327,7 @@ function ProtectionStatus({ collapsed, onNavigate }: { collapsed: boolean; onNav
   const watching = !linux || settings.data.watch.on;
   const good = watching && waiting === 0;
   const text = !watching
-    ? "The agent watch is off"
+    ? "Agents without Oathrion are not watched"
     : waiting > 0
       ? `${String(waiting)} agent${waiting > 1 ? "s" : ""} waiting for you`
       : !linux

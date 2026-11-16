@@ -83,7 +83,7 @@ function Form({ agent, data, onClose }: { agent: string; data: MascotCatalog | u
               aria-checked={mascot === m.id}
               onClick={() => setMascot(m.id)}
               className={cn(
-                "flex w-full flex-col items-center gap-1 rounded-2xl border border-card-border bg-background/30 p-2 text-[11px] font-medium transition-transform hover:-translate-y-0.5",
+                "flex w-full flex-col items-center gap-1 rounded-2xl border border-card-border bg-background/30 p-2 text-[11px] font-medium",
                 mascot === m.id && "oath-glow",
               )}
               style={mascot === m.id ? glowOf(m.id) : undefined}
@@ -109,11 +109,11 @@ function Form({ agent, data, onClose }: { agent: string; data: MascotCatalog | u
       <div className="oath-glow flex items-center gap-4 rounded-2xl border border-card-border bg-card p-4" style={glowOf(mascot)} data-testid="mascot-preview">
         <img src={`/mascots/${mascot}.png`} alt="" className="h-16 w-16 shrink-0 object-contain" />
         <div className="min-w-0">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Your notification</p>
+          <p className="text-xs font-medium text-muted-foreground">Your notification</p>
           <p className="truncate text-[17px] font-semibold tracking-tight">
             {shownName} ({agent}) is paused
           </p>
-          <p className="text-[13px] text-muted-foreground">It was running outside Oathrion's jail. Nothing is lost.</p>
+          <p className="text-[13px] text-muted-foreground">It was running without Oathrion's protection. Nothing is lost.</p>
         </div>
       </div>
       <div className="flex justify-end gap-2">

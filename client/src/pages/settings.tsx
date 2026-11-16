@@ -738,7 +738,7 @@ function BillingTab() {
         ))}
       </SectionCard>
       <Surface className="p-5">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <p className="text-xs font-medium text-muted-foreground">
           Billing
         </p>
         <p className="mt-2 text-sm text-muted-foreground">

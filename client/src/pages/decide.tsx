@@ -11,6 +11,7 @@ import { Share2, ThumbsDown, ThumbsUp } from "lucide-react";
 import { Link, useLocation, useSearch } from "wouter";
 
 import { ErrorState } from "@/components/common/primitives";
+import { ReceiptMoment } from "@/components/receipts/ReceiptMoment";
 import { Button } from "@/components/ui/button";
 import { getDecision, makeDecision, shareDecision, type LocalDecision } from "@/lib/api";
 import { accentOf, glowOf } from "@/lib/mascot-style";
@@ -134,6 +135,13 @@ export default function DecidePage() {
 
         {failure ? <p className="mt-4 text-sm text-destructive">{failure}</p> : null}
       </section>
+
+      {/* Une demande d'approbation tranchée : son reçu signé sort juste en dessous. */}
+      {d.done && d.executionId ? (
+        <div className="mt-4">
+          <ReceiptMoment executionRef={d.executionId} />
+        </div>
+      ) : null}
 
       <p className="mt-4 text-center text-xs text-muted-foreground">
         <Link href="/home" className="underline-offset-4 hover:underline">Back to Home</Link>

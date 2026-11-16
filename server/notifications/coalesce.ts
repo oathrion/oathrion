@@ -28,7 +28,13 @@ export function groupedEvent(events: readonly NotificationEvent[]): Notification
     approvalId: null,
     title: `${String(events.length)} requests are waiting for your decision`,
     summary: events.map((event) => event.title).slice(0, 3).join(" · ") + (events.length > 3 ? " · …" : ""),
-    data: { ...first.data, grouped: events.length, titles: events.map((event) => event.title).slice(0, 5) },
+    data: {
+      ...first.data,
+      grouped: events.length,
+      titles: events.map((event) => event.title).slice(0, 5),
+      /* Ce que chacune demande, dit comme dans la console : la notification les liste (`desktopText`). */
+      headlines: events.map((event) => (event.data.words as { headline?: unknown } | undefined)?.headline).filter((h): h is string => typeof h === "string").slice(0, 5),
+    },
   };
 }
 
