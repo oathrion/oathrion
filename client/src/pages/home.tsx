@@ -15,7 +15,8 @@ import { ShareDialog } from "@/components/feed/ShareDialog";
 import { ReadinessCard } from "@/components/home/ReadinessCard";
 import { StoppedCard } from "@/components/home/StoppedCard";
 import { Button } from "@/components/ui/button";
-import { getFeed, type FeedItem } from "@/lib/api";
+import { getFeed, listRunningAgents, type FeedItem } from "@/lib/api";
+import { useARIA } from "@/lib/store";
 import { relativeTime } from "@/lib/format";
 import { glowOf } from "@/lib/mascot-style";
 import { cn } from "@/lib/utils";
@@ -52,7 +53,14 @@ function Hero({ items }: { items: FeedItem[] }) {
   const today = items.filter((item) => Date.parse(item.at) >= since);
   const count = (tone: FeedItem["tone"]) => today.filter((item) => item.tone === tone).length;
   const alerts = count("bad");
-  const waiting = count("warn");
+  /*
+   * « Needs you » : ce qui attend MAINTENANT (16 novembre, essai filmé : « Something needs a
+   * look » et « Needs you 1 » quand plus rien n'était en attente — le compteur reprenait les
+   * événements « à regarder » des dernières 24 h). Les demandes en attente, et les agents en pause.
+   */
+  const { approvals } = useARIA();
+  const running = useQuery({ queryKey: ["/api/local/agents/running"], queryFn: listRunningAgents, retry: false, refetchInterval: 5_000 });
+  const waiting = approvals.filter((a) => a.status === "pending").length + (running.data ?? []).filter((a) => a.paused).length;
   const headline = alerts > 0 ? "Oathrion stepped in today." : waiting > 0 ? "Something needs a look." : "Your AI agents are under watch.";
   return (
     <Surface className="oath-glow relative overflow-hidden p-6" style={glowOf("warden", alerts > 0)} data-testid="home-hero">
