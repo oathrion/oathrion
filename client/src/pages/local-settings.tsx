@@ -5,11 +5,14 @@
  * commande, que la page donne (ils installent des services et des fichiers). L'organisation, les
  * membres, les clés API : « Details », « Advanced settings ».
  */
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Bell, Eye, KeyRound, ShieldCheck, Smartphone, Users } from "lucide-react";
 
 import { PageHeader, Surface } from "@/components/common/primitives";
+import { PhonePairDialog } from "@/components/settings/PhonePairDialog";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { getLocalSettings, setDesktopNotifications } from "@/lib/api";
@@ -36,6 +39,7 @@ const Command = ({ children }: { children: string }) => <code className="rounded
 
 export default function LocalSettingsPage() {
   const settings = useQuery({ queryKey: ["/api/local/settings"], queryFn: getLocalSettings });
+  const [pairing, setPairing] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const data = settings.data;
@@ -66,7 +70,12 @@ export default function LocalSettingsPage() {
             {data.phone?.paired ? (
               <>Requests reach you on Telegram (@{data.phone.bot}), with Approve and Reject, anywhere. To unpair: <Command>oathrion phone off</Command></>
             ) : (
-              <>Leave your computer at home and decide from your phone, on Telegram: <Command>oathrion phone telegram</Command> (it asks for the token of a bot made with @BotFather).</>
+              <span className="flex flex-wrap items-center justify-between gap-3">
+                <span>Away from your computer, your agents' requests reach your phone on Telegram, with Approve and Reject.</span>
+                <Button size="sm" onClick={() => setPairing(true)} data-testid="button-pair-phone">
+                  Pair my phone
+                </Button>
+              </span>
             )}
           </Row>
           <Row icon={Eye} title="Agents started without Oathrion" state={!linux ? "Linux only, for now" : data.watch.on ? "Paused, and you are asked" : "Not watched"} on={data.watch.on}>
@@ -101,6 +110,7 @@ export default function LocalSettingsPage() {
       ) : (
         <p className="text-sm text-muted-foreground">{settings.isError ? "The settings could not be read." : "Reading…"}</p>
       )}
+      <PhonePairDialog open={pairing} onClose={() => setPairing(false)} />
     </div>
   );
 }

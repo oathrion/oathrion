@@ -1535,6 +1535,51 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
    * se règlent ici ; la veille, la prison par défaut et les leurres se posent par une commande
    * (ils installent des services et des fichiers : la page dit laquelle).
    */
+  /*
+   * APPAIRER LE TÉLÉPHONE DEPUIS LA CONSOLE (16 novembre, `server/local-phone-pairing.ts`) : le
+   * jeton du robot collé ici, puis le QR code ; la console relit l'état jusqu'au « Paired ».
+   */
+  const phonePairings = new Map<string, import("./local-phone-pairing").PhonePairing>();
+  const phonePairing = async (dir: string) => {
+    const { PhonePairing } = await import("./local-phone-pairing");
+    const mascot = path.join(path.dirname(process.argv[1] ?? ""), "public", "mascots", "warden.png");
+    if (!phonePairings.has(dir)) phonePairings.set(dir, new PhonePairing(dir, { mascot: fs.existsSync(mascot) ? mascot : null }));
+    return phonePairings.get(dir)!;
+  };
+  app.get(
+    "/api/local/phone",
+    requireCapability("manage"),
+    handle(async (_req, res) => {
+      const hub = activeHub();
+      if (!isLocalMode() || !hub) return fail(res, 404, "Not found");
+      res.json((await phonePairing(hub.dir)).status());
+    }),
+  );
+  app.post(
+    "/api/local/phone/pair",
+    requireCapability("manage"),
+    handle(async (req, res) => {
+      const hub = activeHub();
+      if (!isLocalMode() || !hub) return fail(res, 404, "Not found");
+      const token = typeof (req.body as { token?: unknown })?.token === "string" ? (req.body as { token: string }).token : "";
+      res.json(await (await phonePairing(hub.dir)).start(token));
+    }),
+  );
+  app.post(
+    "/api/local/phone/test",
+    requireCapability("manage"),
+    handle(async (_req, res) => {
+      const hub = activeHub();
+      if (!isLocalMode() || !hub) return fail(res, 404, "Not found");
+      try {
+        await (await phonePairing(hub.dir)).test();
+        res.json({ ok: true });
+      } catch (error) {
+        fail(res, 409, error instanceof Error ? error.message : String(error));
+      }
+    }),
+  );
+
   app.get(
     "/api/local/settings",
     requireCapability("read"),
@@ -1607,7 +1652,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const hub = activeHub();
       if (!isLocalMode() || !hub) return fail(res, 404, "Not found");
       const exe = typeof (req.body as { exe?: unknown })?.exe === "string" ? (req.body as { exe: string }).exe : "";
-      if (!hub.outsideAllowances.has(exe)) return fail(res, 404, "This program is not allowed outside the jail.");
+      if (!hub.outsideAllowances.has(exe)) return fail(res, 404, "This program is not allowed to run without Oathrion's protection.");
       const was = hub.outsideAllowances.list()[exe]?.agent ?? exe;
       hub.outsideAllowances.revoke(exe);
       hub.events.record({ kind: "forgotten", agent: was, by: "you, from the console" });

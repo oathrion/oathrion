@@ -1211,6 +1211,27 @@ export async function grantAlways(approvalId: string): Promise<{ ok: true } | { 
   return { ok: false, message: body.error ?? body.message ?? `The server answered ${String(res.status)}.` };
 }
 
+/** L'appairage du téléphone depuis la console (`server/local-phone-pairing.ts`). */
+export type PhonePairing =
+  | { state: "idle" }
+  | { state: "waiting"; bot: string; link: string; code: string; until: string; qr: { size: number; cells: string } }
+  | { state: "paired"; bot: string }
+  | { state: "expired"; bot: string }
+  | { state: "failed"; message: string };
+
+export async function getPhonePairing(): Promise<PhonePairing> {
+  return get<PhonePairing>("/api/local/phone");
+}
+
+export async function startPhonePairing(token: string): Promise<PhonePairing> {
+  const res = await apiRequest("POST", "/api/local/phone/pair", { token });
+  return (await res.json()) as PhonePairing;
+}
+
+export async function testPhone(): Promise<void> {
+  await apiRequest("POST", "/api/local/phone/test", {});
+}
+
 /** « Allow 1 hour » : cet agent, cet outil, une heure sans redemander (`server/local-hour-passes.ts`). */
 export async function grantHour(approvalId: string): Promise<{ ok: true; clock: string } | { ok: false; message: string }> {
   const res = await apiRequestAllowingFailure("POST", "/api/local/hour-pass", { approvalId });

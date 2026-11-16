@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { useARIA, useFreshSnapshot } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
+import { useLocalMode } from "@/lib/local-mode";
 import { currency, dayDate } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
 import type { Policy, PolicyAction, PolicyCondition, PolicyEffect, PolicyScope, PolicyType, RiskLevel } from "@/types";
@@ -183,9 +184,17 @@ function NewPolicyDialog({
   onCreate: (p: Policy) => void;
 }) {
   const { toast } = useToast();
+  /*
+   * En local (16 novembre, essai filmé) : un agent de code, pas des paiements. Le formulaire
+   * s'ouvrait sur « Maximum refund amount », 2 000 €, « purchase, refund » : incompréhensible
+   * pour qui protège Claude Code. Il s'ouvre sur une approbation, avec des exemples d'outils.
+   */
+  const local = useLocalMode();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [type, setType] = useState<PolicyType>("MAX_TRANSACTION_AMOUNT");
+  /* Le mode local se sait après le premier rendu : le type par défaut se lit au rendu, pas à la création. */
+  const [chosenType, setType] = useState<PolicyType | null>(null);
+  const type: PolicyType = chosenType ?? (local ? "REQUIRE_HUMAN_APPROVAL" : "MAX_TRANSACTION_AMOUNT");
   const [limit, setLimit] = useState("2000");
   const [targets, setTargets] = useState("");
   const [actions, setActions] = useState("");
@@ -299,7 +308,7 @@ function NewPolicyDialog({
               id="policy-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Maximum refund amount"
+              placeholder={local ? "Ask before deleting a file" : "Maximum refund amount"}
               data-testid="input-policy-name"
               className={inputClass}
             />
@@ -311,7 +320,7 @@ function NewPolicyDialog({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
-              placeholder="Above the threshold, a refund waits for a person."
+              placeholder={local ? "Every delete on the files server waits for me." : "Above the threshold, a refund waits for a person."}
               data-testid="input-policy-description"
               className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25"
             />
@@ -325,11 +334,23 @@ function NewPolicyDialog({
               data-testid="select-policy-type"
               className={inputClass}
             >
-              <option value="MAX_TRANSACTION_AMOUNT">Maximum amount per transaction</option>
-              <option value="MAX_DAILY_SPEND">Maximum daily spend</option>
-              <option value="REQUIRE_HUMAN_APPROVAL">Human approval required</option>
-              <option value="BLOCK_TOOL">Block</option>
-              <option value="ALLOW_TOOL">Allow</option>
+              {local ? (
+                <>
+                  <option value="REQUIRE_HUMAN_APPROVAL">Ask me first</option>
+                  <option value="BLOCK_TOOL">Never allow</option>
+                  <option value="ALLOW_TOOL">Always allow</option>
+                  <option value="MAX_TRANSACTION_AMOUNT">Maximum amount per transaction (payments)</option>
+                  <option value="MAX_DAILY_SPEND">Maximum daily spend (payments)</option>
+                </>
+              ) : (
+                <>
+                  <option value="MAX_TRANSACTION_AMOUNT">Maximum amount per transaction</option>
+                  <option value="MAX_DAILY_SPEND">Maximum daily spend</option>
+                  <option value="REQUIRE_HUMAN_APPROVAL">Human approval required</option>
+                  <option value="BLOCK_TOOL">Block</option>
+                  <option value="ALLOW_TOOL">Allow</option>
+                </>
+              )}
             </select>
           </div>
 
@@ -354,7 +375,7 @@ function NewPolicyDialog({
                 id="policy-targets"
                 value={targets}
                 onChange={(e) => setTargets(e.target.value)}
-                placeholder="production_database, postgres.prod*"
+                placeholder={local ? "mcp://files/*" : "production_database, postgres.prod*"}
                 data-testid="input-policy-targets"
                 className={`${inputClass} font-mono text-xs`}
               />
@@ -370,7 +391,7 @@ function NewPolicyDialog({
               id="policy-actions"
               value={actions}
               onChange={(e) => setActions(e.target.value)}
-              placeholder="purchase, refund"
+              placeholder={local ? "mcp.files.delete_file" : "purchase, refund"}
               data-testid="input-policy-actions"
               className={`${inputClass} font-mono text-xs`}
             />

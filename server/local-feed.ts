@@ -56,13 +56,13 @@ function fromEvent(event: LocalEvent, face: Face = defaultFace): FeedItem | null
   const base = { id: event.id, at: event.at, agent: event.agent, mascot, ...(event.detail ? { detail: event.detail } : {}) };
   switch (event.kind) {
     case "paused":
-      return { ...base, tone: "warn", title: `${label} was paused: it was running without Oathrion's protection.`, share: `Oathrion caught my AI agent ${event.agent} running outside its jail, and paused it until I decided.` };
+      return { ...base, tone: "warn", title: `${label} was paused: it was running without Oathrion's protection.`, share: `Oathrion caught my AI agent ${event.agent} running without its protection, and paused it until I decided.` };
     case "reported":
-      return { ...base, tone: "warn", title: `${label} is running without Oathrion's protection.`, share: `Oathrion told me my AI agent ${event.agent} was running outside its jail.` };
+      return { ...base, tone: "warn", title: `${label} is running without Oathrion's protection.`, share: `Oathrion told me my AI agent ${event.agent} was running without its protection.` };
     case "resumed-once":
       return { ...base, tone: "info", title: `You let ${label} go on, this time only.`, share: `Oathrion paused my AI agent ${event.agent}; I let it go on, this time only.` };
     case "allowed":
-      return { ...base, tone: "info", title: `You let ${label} run without Oathrion's protection, from now on.`, share: `I allowed my AI agent ${event.agent} outside Oathrion's jail.` };
+      return { ...base, tone: "info", title: `You let ${label} run without Oathrion's protection, from now on.`, share: `I let my AI agent ${event.agent} run without Oathrion's protection.` };
     case "forgotten":
       return { ...base, tone: "good", title: `${label} must run with Oathrion's protection again.`, share: `My AI agent ${event.agent} now has to ask again, under Oathrion.` };
     case "stopped":
@@ -92,7 +92,9 @@ function fromApproval(approval: Approval, face: Face = defaultFace): FeedItem | 
    * « mcp.carnet.create note · mcp://carnet/create_note »), et qui a tranché.
    */
   const text = describeApproval(approval);
-  const asked = [text.headline.replace(/^.*? wants to /, ""), text.where].filter(Boolean).join(" ");
+  /* Une commande de Claude Code : « asked to run a command » suffit, la commande est dessous (16 novembre : « with its own tools, in auto mode » alourdissait chaque ligne). */
+  const own = text.where?.startsWith("with its own tools") === true;
+  const asked = [text.headline.replace(/^.*? wants to /, ""), own ? null : text.where].filter(Boolean).join(" ");
   const content = notificationWords(approval, null).content;
   const byPass = approval.resolvedBy?.startsWith("your 1-hour permission") === true;
   return {

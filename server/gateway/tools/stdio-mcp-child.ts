@@ -93,6 +93,21 @@ function trackGroup(pid: number): void {
 /** Pagination de `tools/list` : au-delà, un serveur qui boucle sur son curseur. */
 const MAX_LIST_PAGES = 20;
 
+/**
+ * `npx -y paquet` interroge le registre npm à CHAQUE lancement, même le paquet en cache : sur une
+ * connexion lente (essai réel du 16 novembre, à Dakar : 16 s puis 1,5 s pour le même serveur),
+ * la poignée de main dépassait le délai, et un serveur différent manquait à chaque démarrage.
+ * Le cache d'abord ; le registre seulement si le paquet manque. Un serveur lancé par npx ne se
+ * met donc plus à jour seul à chaque démarrage, comme Oathrion le veut déjà pour ses outils
+ * (épinglés). Un réglage de la personne (`npm_config_prefer_offline` ou `_online`) est respecté.
+ */
+export function childEnv(command: string, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const tool = command.split(/[\\/]/).pop()?.toLowerCase() ?? "";
+  if (tool !== "npx" && tool !== "npx.cmd") return env;
+  const set = Object.keys(env).some((key) => /^npm_config_prefer_(offline|online)$/i.test(key));
+  return set ? env : { ...env, npm_config_prefer_offline: "true" };
+}
+
 export interface StdioChildSpec {
   command: string;
   args: readonly string[];
@@ -210,7 +225,7 @@ export class StdioMcpChild {
     if (this.running) throw new Error("The child is already running.");
     const child = spawnChild(this.spec.command, [...this.spec.args], {
       cwd: this.spec.cwd,
-      env: this.spec.env ?? process.env,
+      env: childEnv(this.spec.command, this.spec.env ?? process.env),
       stdio: ["pipe", "pipe", "pipe"],
       shell: false,
       windowsHide: true,

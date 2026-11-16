@@ -70,3 +70,31 @@ describe("le fil", () => {
     }
   });
 });
+
+describe("une commande de Claude Code dans le fil (16 novembre)", () => {
+  it("« asked to run a command » ; la commande, dessous", () => {
+    const approval = {
+      id: "apr_c",
+      executionId: "exe_c",
+      agentId: "agt",
+      agentName: "Claude Code",
+      title: "mcp.claude-code.shell · shell:///p",
+      summary: "",
+      requestedValue: "",
+      policyId: "p",
+      policyName: "p",
+      policyLimit: "",
+      risk: "medium",
+      status: "approved",
+      requestedAt: "2026-11-16T09:00:00Z",
+      resolvedAt: "2026-11-16T09:01:00Z",
+      context: [
+        { label: "Action", value: "mcp.claude-code.shell" },
+        { label: "Target", value: "shell:///p" },
+        { label: "command", value: "git push origin main" },
+      ],
+    } as unknown as Approval;
+    const [item] = buildFeed({ events: [], approvals: [approval], executions: [] });
+    expect(item).toMatchObject({ title: "Ember (Claude Code) asked to run a command; you approved.", detail: "“git push origin main”" });
+  });
+});

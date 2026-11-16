@@ -21,6 +21,7 @@ import { RiskBadge } from "@/components/common/badges";
 import { useToast } from "@/hooks/use-toast";
 import { useARIA } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
+import { useLocalMode } from "@/lib/local-mode";
 import { PERMISSION_CATALOG } from "@/data/agents";
 import { permissionText } from "@/lib/permission-labels";
 import type { Agent, Permission } from "@/types";
@@ -37,11 +38,18 @@ export function PermissionsCard({ agent }: { agent: Agent }) {
   const { can } = useAuth();
   const { toast } = useToast();
   const canManage = can("manage");
+  /*
+   * En local (16 novembre) : seulement ce qu'Oathrion accorde sur les serveurs de la machine
+   * (mcp:read, mcp:write, mcp:destructive). Stripe, Linear… sont des portées de la version
+   * équipe ; masquées ici, elles restent dans le brouillon et ne changent pas à l'enregistrement.
+   */
+  const local = useLocalMode();
+  const visible = (p: Permission) => !local || p.scope.startsWith("mcp:");
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState<Permission[]>(() => withCatalog(agent.permissions));
 
-  const granted = agent.permissions.filter((p) => p.granted);
+  const granted = agent.permissions.filter((p) => p.granted && visible(p));
 
   function open() {
     if (!canManage) return;
@@ -128,7 +136,7 @@ export function PermissionsCard({ agent }: { agent: Agent }) {
       {editing && (
         <div className="space-y-1 px-5 py-5">
           <ul className="divide-y divide-card-border" data-testid="list-permission-editor">
-            {draft.map((p) => (
+            {draft.filter(visible).map((p) => (
               <li key={p.scope} className="flex items-start gap-3 py-3.5 first:pt-0">
                 <Switch
                   checked={p.granted}

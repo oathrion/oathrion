@@ -101,7 +101,8 @@ async function buildAll() {
     define: serverDefine,
     inject: ["script/import-meta-url.js"],
     minify: true,
-    external: externals,
+    /* Le QR code de l'appairage du téléphone dans la console (`server/local-phone-pairing.ts`) : son cœur, du JavaScript pur, intégré comme dans `oathrion.mjs`. */
+    external: externals.filter((dep) => dep !== "qrcode"),
     logLevel: "info",
   });
 

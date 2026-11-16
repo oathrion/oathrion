@@ -268,7 +268,7 @@ async function main(): Promise<void> {
             { id: "resume", label: paused ? "Resume this time" : "Leave it this time" },
             { id: "allow", label: "Allow" },
           ],
-          feedbackAbout: `${paused ? "paused" : "reported"} ${agent.agent}, running outside the jail`,
+          feedbackAbout: `${paused ? "paused" : "reported"} ${agent.agent}, running without Oathrion's protection`,
           onChoice: (choice) => {
             const mascot = face(agent.agent).name;
             if (choice === "stop") {

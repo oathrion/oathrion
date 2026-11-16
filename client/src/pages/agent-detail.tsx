@@ -20,6 +20,7 @@ import { ExecutionTable } from "@/components/executions/ExecutionTable";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { useARIA } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
+import { useLocalMode } from "@/lib/local-mode";
 import { PROVIDER_LABEL } from "@/data/agents";
 import { currency, percent } from "@/lib/format";
 import { agentToggleAffordance, agentToggleDisabled } from "@/lib/agent-presentation";
@@ -28,6 +29,7 @@ export default function AgentDetailPage() {
   const [, params] = useRoute("/agents/:id");
   const { agents, executions, policies, activity, loading, error, reload, toggleAgentStatus } = useARIA();
   const { can } = useAuth();
+  const local = useLocalMode();
   const canManage = can("manage");
   const agent = agents.find((a) => a.id === params?.id);
   /* Même clé de cache que le panneau : la pastille et le panneau lisent la même réponse. */
@@ -124,33 +126,45 @@ export default function AgentDetailPage() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-6">
           <SectionCard title="Overview" bodyClassName="grid gap-x-8 px-5 sm:grid-cols-3">
-            <KeyValue label="Provider">{PROVIDER_LABEL[agent.provider]}</KeyValue>
-            <KeyValue label="Model">
-              <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{agent.model}</code>
-            </KeyValue>
-            <KeyValue label="Owner">{agent.owner}</KeyValue>
+            {/* En local (16 novembre) : ni fournisseur, ni modèle, ni coûts, ni taux de réussite ; ce sont des notions de la version équipe. */}
+            {local ? null : (
+              <>
+                <KeyValue label="Provider">{PROVIDER_LABEL[agent.provider]}</KeyValue>
+                <KeyValue label="Model">
+                  <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{agent.model}</code>
+                </KeyValue>
+                <KeyValue label="Owner">{agent.owner}</KeyValue>
+              </>
+            )}
             <KeyValue label="Risk level">
               <RiskBadge risk={agent.riskLevel} />
             </KeyValue>
-            <KeyValue label="Cost (24 h)">
-              <span className="tabular">{currency(agent.cost24h)}</span>
-            </KeyValue>
-            <KeyValue label="Cost (month)">
-              <span className="tabular">{currency(agent.costMonth)}</span>
-            </KeyValue>
+            {local ? null : (
+              <>
+                <KeyValue label="Cost (24 h)">
+                  <span className="tabular">{currency(agent.cost24h)}</span>
+                </KeyValue>
+                <KeyValue label="Cost (month)">
+                  <span className="tabular">{currency(agent.costMonth)}</span>
+                </KeyValue>
+              </>
+            )}
             <KeyValue label="Executions (24 h)">
               <span className="tabular">{agent.executions24h}</span>
             </KeyValue>
-            <KeyValue label="Success rate">
-              {/* Zero is an operational result, not a missing value. */}
-              <span className="tabular">
-                {agent.successRate === null || agent.successRate === undefined ? "—" : percent(agent.successRate)}
-              </span>
-            </KeyValue>
+            {local ? null : (
+              <KeyValue label="Success rate">
+                {/* Zero is an operational result, not a missing value. */}
+                <span className="tabular">
+                  {agent.successRate === null || agent.successRate === undefined ? "—" : percent(agent.successRate)}
+                </span>
+              </KeyValue>
+            )}
             <KeyValue label="Created on">{agent.createdAt}</KeyValue>
           </SectionCard>
 
-          <MandateCard agent={agent} />
+          {/* Le mandat de paiement (montants, catégories d'achat) : la version équipe, pas un agent de code. */}
+          {local ? null : <MandateCard agent={agent} />}
 
           <WithheldToolsNotice agentId={agent.id} />
 
@@ -182,6 +196,11 @@ export default function AgentDetailPage() {
         </div>
 
         <div className="space-y-6">
+          {/*
+            En local, les règles valent pour tous les agents (celles des serveurs) : « No policy
+            attached — no extra guardrail » faisait croire à un agent sans protection.
+          */}
+          {local && agentPolicies.length === 0 ? null : (
           <SectionCard title="Policies" description="The rules evaluated before each action.">
             {agentPolicies.length === 0 ? (
               <EmptyState
@@ -205,6 +224,7 @@ export default function AgentDetailPage() {
               </ul>
             )}
           </SectionCard>
+          )}
 
           <SectionCard title="Activity" description="This agent's latest events.">
             <ActivityFeed events={agentActivity} />

@@ -6,13 +6,14 @@
  */
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useSearch } from "wouter";
+import { Link, useSearch } from "wouter";
 import { Newspaper, Share2 } from "lucide-react";
 
 import { RunningAgentsPanel } from "@/components/agents/RunningAgentsPanel";
 import { EmptyState, ErrorState, PageHeader, Surface, TableSkeleton } from "@/components/common/primitives";
 import { ShareDialog } from "@/components/feed/ShareDialog";
 import { ReadinessCard } from "@/components/home/ReadinessCard";
+import { StoppedCard } from "@/components/home/StoppedCard";
 import { Button } from "@/components/ui/button";
 import { getFeed, type FeedItem } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
@@ -26,6 +27,19 @@ const TONE: Record<FeedItem["tone"], { dot: string; label: string }> = {
   bad: { dot: "bg-red-500", label: "Alert" },
   info: { dot: "bg-muted-foreground/60", label: "" },
 };
+
+/** Le fil de l'accueil : les plus récents ; le reste est dans Activity (16 novembre, la passe de concentration). */
+const FEED_SHOWN = 8;
+
+/**
+ * Ce qui se partage : un moment où Oathrion a protégé (un arrêt, un refus, un leurre lu, un agent
+ * mis en pause, une décision). Pas « did one thing through Oathrion: shell », ni chaque commande
+ * approuvée : un bouton « Share » sur chaque ligne n'en signalait plus aucune.
+ */
+function worthSharing(item: FeedItem): boolean {
+  if (item.tone === "info") return false;
+  return !(item.id.startsWith("apr_") && item.tone === "good");
+}
 
 /**
  * L'en-tête de l'accueil : Warden, la mascotte d'Oathrion, et la journée en trois chiffres tirés
@@ -88,6 +102,7 @@ export default function HomePage() {
     <div className="space-y-6">
       <PageHeader title="Home" subtitle="What your AI agents are doing, and what Oathrion did about it." />
       <Hero items={feed.data ?? []} />
+      <StoppedCard />
       <ReadinessCard />
       <RunningAgentsPanel />
       <section className="space-y-3" data-testid="feed">
@@ -106,7 +121,7 @@ export default function HomePage() {
           </Surface>
         ) : (
           <ul className="space-y-2.5">
-            {feed.data.map((item) => (
+            {feed.data.slice(0, FEED_SHOWN).map((item) => (
               <li key={item.id}>
                 <Surface
                   className={cn("flex items-center gap-4 p-3.5 pr-4", item.tone === "bad" && "oath-glow")}
@@ -125,22 +140,31 @@ export default function HomePage() {
                       {relativeTime(item.at)}
                     </p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="rounded-full border-primary/30 bg-primary/10 text-foreground hover:bg-primary/20"
-                    onClick={() => setSharing(item)}
-                    aria-label="Share"
-                    data-testid={`button-share-${item.id}`}
-                  >
-                    <Share2 className="h-4 w-4" aria-hidden="true" />
-                    <span className="ml-1.5 hidden sm:inline">Share</span>
-                  </Button>
+                  {worthSharing(item) ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-full border-primary/30 bg-primary/10 text-foreground hover:bg-primary/20"
+                      onClick={() => setSharing(item)}
+                      aria-label="Share"
+                      data-testid={`button-share-${item.id}`}
+                    >
+                      <Share2 className="h-4 w-4" aria-hidden="true" />
+                      <span className="ml-1.5 hidden sm:inline">Share</span>
+                    </Button>
+                  ) : null}
                 </Surface>
               </li>
             ))}
           </ul>
         )}
+        {feed.data && feed.data.length > FEED_SHOWN ? (
+          <p className="px-1 text-[13px]">
+            <Link href="/activity" className="font-medium underline-offset-2 hover:underline" data-testid="link-feed-all">
+              Everything your agents did, in Activity
+            </Link>
+          </p>
+        ) : null}
       </section>
       <ShareDialog item={sharing} onClose={() => setSharing(null)} />
     </div>

@@ -10,6 +10,7 @@ import { Check, Copy } from "lucide-react";
 import { Link } from "wouter";
 
 import { Surface } from "@/components/common/primitives";
+import { PhonePairDialog } from "@/components/settings/PhonePairDialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { getReadiness, showDemo, type Readiness } from "@/lib/api";
@@ -52,6 +53,7 @@ export function ReadinessCard() {
   const client = useQueryClient();
   const { toast } = useToast();
   const [gone, setGone] = useState(hidden);
+  const [pairing, setPairing] = useState(false);
   const demo = useMutation({
     mutationFn: showDemo,
     onSuccess: () => {
@@ -91,11 +93,11 @@ export function ReadinessCard() {
     phone: {
       title: "Decide from your phone, anywhere",
       done: (s) => `Paired (Telegram${s.bot ? `, @${s.bot}` : ""})`,
+      /* 16 novembre : plus de terminal ni de jeton recopié du téléphone, l'assistant de la console (`PhonePairDialog`). */
       action: () => (
-        <span className="flex flex-col gap-1">
-          <CopyCommand command="oathrion phone telegram" />
-          <span className="text-[11px] text-muted-foreground">The token: in Telegram, @BotFather → /newbot.</span>
-        </span>
+        <Button size="sm" variant="outline" className="rounded-full" onClick={() => setPairing(true)} data-testid="readiness-phone">
+          Pair my phone
+        </Button>
       ),
     },
     named: {
@@ -171,6 +173,7 @@ export function ReadinessCard() {
           );
         })}
       </ol>
+      <PhonePairDialog open={pairing} onClose={() => setPairing(false)} />
     </Surface>
   );
 }

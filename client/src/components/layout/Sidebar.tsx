@@ -17,7 +17,6 @@ import {
   Plus,
   LogOut,
   Rocket,
-  Users,
   History,
   ShieldHalf,
   FileSignature,
@@ -101,14 +100,16 @@ export function Sidebar({
     { href: "/protection", label: "Protection", icon: ShieldHalf },
     { href: "/settings", label: "Settings", icon: Settings },
   ];
+  /*
+   * 16 novembre (la passe de concentration) : un développeur seul avec son agent n'a que faire des
+   * exécutions brutes, des statistiques, de l'équipe ou des réglages d'organisation ; ils lui
+   * disaient « ce produit n'est pas pour moi ». Les pages existent toujours ; « Your team » est un
+   * lien dans les réglages.
+   */
   const localDetails: NavItem[] = [
     { href: "/activity", label: "Activity", icon: History },
     { href: "/servers", label: "Servers", icon: Plug },
-    { href: "/executions", label: "Executions", icon: Terminal },
     { href: "/policies", label: "Policies", icon: ShieldCheck },
-    { href: "/analytics", label: "Analytics", icon: BarChart3 },
-    { href: "/team", label: "Your team", icon: Users },
-    { href: "/settings/advanced", label: "Advanced settings", icon: Settings },
   ];
   const shown = local ? localItems : items;
   /* « Details » s'ouvre tout seul quand on est sur l'une de ses pages. */
