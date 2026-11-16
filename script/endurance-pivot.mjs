@@ -13,7 +13,10 @@
  *   · une écriture sur dix, posée DANS le client et acceptée (case cochée) ;
  *   · une écriture sur cinquante, retenue puis approuvée dans la console (API) ;
  *   · toutes les 5 minutes, l'écran « Serveurs » et un relevé : mémoire du pivot (VmRSS),
- *     descripteurs, latences p50/p95/p99 de la période.
+ *     descripteurs, latences p50/p95/p99 de la période ;
+ *   · au même moment, l'accueil tel que la console le charge (bilan du jour et des 7 jours,
+ *     activité, demandes) et le reçu partageable de la dernière action : leur temps, qui relit
+ *     les chaînes en entier, ne doit pas rendre la console inutilisable avec le volume.
  * À la fin : `oathrion receipts verify`, et un verdict par contrôle. Les relevés vont dans
  * `<sortie>/releves.csv`, le verdict dans `<sortie>/verdict.txt`. Rien ne sort de la machine.
  *
@@ -38,7 +41,7 @@ const PACE_MS = 1_000 / Number(arg("--par-seconde", "5"));
 mkdirSync(OUT, { recursive: true });
 
 const home = mkdtempSync(join(tmpdir(), "oathrion-endurance-home-"));
-const env = { PATH: process.env.PATH ?? "", HOME: home, OATHRION_WRAP_HOME: home, OATHRION_LOCAL_NOTIFY_DESKTOP: "0", OATHRION_CONSOLE_LIEN: "1" };
+const env = { PATH: process.env.PATH ?? "", HOME: home, OATHRION_WRAP_HOME: home, OATHRION_LOCAL_NOTIFY_DESKTOP: "0", OATHRION_LOCAL_NOTIFY_POPUP: "0", OATHRION_LOCAL_AGENT_WATCH: "0", OATHRION_NO_SESSION_CHANGES: "1", OATHRION_CONSOLE_LIEN: "1" };
 const now = () => performance.now();
 const percentile = (values, p) => {
   if (values.length === 0) return 0;
@@ -102,7 +105,7 @@ const counts = { reads: 0, inClient: 0, inConsole: 0, errors: 0 };
 const errors = [];
 let period = [];
 const csv = join(OUT, "releves.csv");
-writeFileSync(csv, "minutes,rss_mo,fds,appels,erreurs,p50_ms,p95_ms,p99_ms,actions_ecran\n");
+writeFileSync(csv, "minutes,rss_mo,fds,appels,erreurs,p50_ms,p95_ms,p99_ms,actions_ecran,accueil_ms,recu_ms\n");
 const samples = [];
 
 const fail = (what) => {
@@ -113,6 +116,20 @@ const fail = (what) => {
 await ask("initialize", { protocolVersion: "2025-11-25", capabilities: { elicitation: { form: {} } }, clientInfo: { name: "claude-code", title: "Claude Code", version: "endurance" } });
 const pid = hubPid();
 if (!pid) throw new Error("pivot introuvable");
+/* Oathrion rencontre ce banc pour la première fois : une personne le confirme dans la console, une fois. */
+{
+  const first = ask("tools/call", { name: "read_note", arguments: {} });
+  const { base, token } = await console_();
+  let pending;
+  for (let tries = 0; tries < 200 && !pending; tries += 1) {
+    const programs = await (await fetch(`${base}/api/local/programs`, { headers: { authorization: `Bearer ${token}` } })).json();
+    pending = programs.find((program) => program.status === "pending");
+    if (!pending) await new Promise((done) => setTimeout(done, 25));
+  }
+  if (!pending) throw new Error("le banc n'apparaît pas parmi les programmes à confirmer");
+  await fetch(`${base}/api/local/programs/${encodeURIComponent(pending.id)}/trust`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: "{}" });
+  await first;
+}
 const start = Date.now();
 const end = start + MINUTES * 60_000;
 let lastSample = start;
@@ -166,6 +183,26 @@ while (Date.now() < end) {
     } catch (error) {
       fail(`écran Serveurs : ${String(error)}`);
     }
+    /* L'accueil : ses requêtes partent ensemble, comme dans la console ; puis le reçu de la dernière action. */
+    let home_ = -1;
+    let receipt = -1;
+    try {
+      const { base, token } = await console_();
+      const get = async (path) => {
+        const response = await fetch(`${base}${path}`, { headers: { authorization: `Bearer ${token}` } });
+        if (!response.ok) throw new Error(`${path} : ${String(response.status)}`);
+        return response.json();
+      };
+      const t0 = now();
+      const [, , activity] = await Promise.all([get("/api/local/summary?period=today"), get("/api/local/summary?period=7d"), get("/api/local/activity"), get("/api/approvals")]);
+      home_ = now() - t0;
+      const ref = activity.entries?.[0]?.ref;
+      const t1 = now();
+      if (ref) await get(`/api/local/receipts/${encodeURIComponent(ref)}/share?format=json`);
+      receipt = now() - t1;
+    } catch (error) {
+      fail(`accueil : ${String(error)}`);
+    }
     const sample = {
       minutes: (Date.now() - start) / 60_000,
       rss: rssMb(pid),
@@ -176,10 +213,12 @@ while (Date.now() < end) {
       p95: percentile(period, 95),
       p99: percentile(period, 99),
       shown,
+      home: home_,
+      receipt,
     };
     samples.push(sample);
-    appendFileSync(csv, `${sample.minutes.toFixed(1)},${sample.rss.toFixed(1)},${String(sample.fds)},${String(sample.calls)},${String(sample.errors)},${sample.p50.toFixed(1)},${sample.p95.toFixed(1)},${sample.p99.toFixed(1)},${String(shown)}\n`);
-    console.log(`  ${sample.minutes.toFixed(0)} min · ${String(sample.calls)} appels · ${String(sample.errors)} erreur(s) · RSS ${sample.rss.toFixed(0)} Mo · p95 ${sample.p95.toFixed(1)} ms`);
+    appendFileSync(csv, `${sample.minutes.toFixed(1)},${sample.rss.toFixed(1)},${String(sample.fds)},${String(sample.calls)},${String(sample.errors)},${sample.p50.toFixed(1)},${sample.p95.toFixed(1)},${sample.p99.toFixed(1)},${String(shown)},${home_.toFixed(0)},${receipt.toFixed(0)}\n`);
+    console.log(`  ${sample.minutes.toFixed(0)} min · ${String(sample.calls)} appels · ${String(sample.errors)} erreur(s) · RSS ${sample.rss.toFixed(0)} Mo · p95 ${sample.p95.toFixed(1)} ms · accueil ${home_.toFixed(0)} ms · reçu ${receipt.toFixed(0)} ms`);
     period = [];
   }
 }
@@ -203,6 +242,8 @@ const checks = [
   ["descripteurs stables (+10 au plus)", last.fds <= first.fds + 10, `${String(first.fds)} → ${String(last.fds)}`],
   ["p95 sans dérive (le double ou +25 ms au plus)", last.p95 <= Math.max(first.p95 * 2, first.p95 + 25), `${first.p95.toFixed(1)} → ${last.p95.toFixed(1)} ms`],
   ["l'écran « Serveurs » suit", last.shown >= last.calls - counts.inConsole, `${String(last.shown)} actions affichées pour ${String(last.calls)} appels`],
+  ["l'accueil se charge en moins de 2 s", Math.max(...samples.map((s) => s.home)) < 2_000, `${samples[0]?.home.toFixed(0)} → ${String(last.home.toFixed(0))} ms (pire ${Math.max(...samples.map((s) => s.home)).toFixed(0)} ms)`],
+  ["le reçu partageable en moins de 2 s", Math.max(...samples.map((s) => s.receipt)) < 2_000, `${samples[0]?.receipt.toFixed(0)} → ${String(last.receipt.toFixed(0))} ms (pire ${Math.max(...samples.map((s) => s.receipt)).toFixed(0)} ms)`],
   ["la chaîne de reçus vérifie", verify.status === 0, verify.stdout.trim().split("\n").at(-1) ?? ""],
 ];
 const verdict = [

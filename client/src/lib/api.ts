@@ -1390,3 +1390,20 @@ export async function getLocalProtection(): Promise<LocalProtection> {
 export async function getLocalServers(): Promise<{ servers: LocalServer[]; unprotected: UnprotectedServer[] }> {
   return get<{ servers: LocalServer[]; unprotected: UnprotectedServer[] }>("/api/local/servers");
 }
+
+/** Les réponses « Was Oathrion right? » gardées sur la machine (`server/local-feedback.ts`). */
+export interface LocalFeedback {
+  answers: { at: string; about: string; decision: string; right: boolean }[];
+  sharedUntil: string | null;
+  version: string;
+  platform: string;
+}
+
+export async function getLocalFeedback(): Promise<LocalFeedback> {
+  return get<LocalFeedback>("/api/local/feedback");
+}
+
+/** La personne a ouvert l'e-mail : ces réponses ne lui sont plus redemandées. */
+export async function markLocalFeedbackShared(until: string): Promise<{ sharedUntil: string }> {
+  return send<{ sharedUntil: string }>("POST", "/api/local/feedback/shared", { until });
+}

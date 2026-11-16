@@ -26,6 +26,7 @@ export default function DecidePage() {
   const [, navigate] = useLocation();
   const client = useQueryClient();
   const [failure, setFailure] = useState<string | null>(null);
+  const [said, setSaid] = useState<boolean | null>(null);
   const key = ["/api/local/decisions", id];
   const decision = useQuery({ queryKey: key, queryFn: () => getDecision(id), enabled: id !== "", retry: false });
   const settle = (next: LocalDecision) => client.setQueryData(key, next);
@@ -85,13 +86,20 @@ export default function DecidePage() {
             {d.done ? (
               <div className="mt-4 flex justify-center gap-2 sm:justify-start">
                 {d.judged ? (
-                  <p className="text-sm text-muted-foreground" data-testid="decision-thanks">Thanks: Oathrion learns from it.</p>
+                  /* « Oathrion learns from it » promettait un apprentissage qui n'existe pas : la réponse reste ici, et la personne nous l'envoie si elle veut. */
+                  said === false ? (
+                    <Button asChild size="sm" className="rounded-full" data-testid="decision-tell-us">
+                      <Link href="/feedback?wrong=1">Tell us what it should have done</Link>
+                    </Button>
+                  ) : (
+                    <p className="text-sm text-muted-foreground" data-testid="decision-thanks">Thanks: it is kept on this computer, for your next feedback.</p>
+                  )
                 ) : (
                   <>
-                    <Button variant="outline" size="icon" className="rounded-full" aria-label="Yes, right" disabled={busy} onClick={() => act.mutate({ right: true })}>
+                    <Button variant="outline" size="icon" className="rounded-full" aria-label="Yes, right" disabled={busy} onClick={() => { setSaid(true); act.mutate({ right: true }); }}>
                       <ThumbsUp className="h-4 w-4" />
                     </Button>
-                    <Button variant="outline" size="icon" className="rounded-full" aria-label="No, wrong" disabled={busy} onClick={() => act.mutate({ right: false })}>
+                    <Button variant="outline" size="icon" className="rounded-full" aria-label="No, wrong" disabled={busy} onClick={() => { setSaid(false); act.mutate({ right: false }); }}>
                       <ThumbsDown className="h-4 w-4" />
                     </Button>
                   </>

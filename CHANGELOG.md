@@ -296,6 +296,18 @@ still checks it.
 - **Fixed:** a server started from a relative path was not found; approving an action whose
   server is not running consumed the approval (now `409`, the request stays pending); a slow
   server start (`npx`) could cost the client its key.
+- **Words, not code.** The console says what an agent did in words (« Delete files », « Write
+  file · on the fichiers server »), with the exact command in small print underneath. Settings
+  no longer show commands: each one appears, ready to copy, only when you ask for it. Technical
+  details (raw data, rule code) are folded away.
+- **Send feedback.** It is in the menu, and on Home when you answered « No » to « Was Oathrion
+  right? ». Your notes and your answers go in an e-mail to contact@oathrion.com, which you read,
+  change and send yourself. Nothing leaves your computer without you.
+- **Fixed, found by a one-hour run** (17,936 calls, no error): Home re-read every receipt each
+  time it refreshed (it now reads only the new ones, and everything every 10 minutes;
+  `oathrion receipts verify` still reads everything); a « Was Oathrion right? » answer could be
+  lost when the notification ended too fast; links carrying parameters lost them (sharing from
+  a decision, « Tell us what happened »).
 
 ## [0.1.0-preview.0] — on npm since 2026-10-28
 

@@ -219,7 +219,7 @@ export default function AgentDetailPage() {
                         {p.effect.replace("_", " ")}
                       </Pill>
                     </div>
-                    <code className="mt-1.5 block font-mono text-[11px] text-muted-foreground">{p.rule}</code>
+                    {local ? null : <code className="mt-1.5 block font-mono text-[11px] text-muted-foreground">{p.rule}</code>}
                   </li>
                 ))}
               </ul>

@@ -5,7 +5,7 @@
  * `?share=<id>` ouvre le partage d'un élément (le bouton « Share » de la notification y mène).
  */
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "wouter";
 import { Newspaper, Share2 } from "lucide-react";
 
@@ -14,8 +14,10 @@ import { EmptyState, ErrorState, PageHeader, Surface, TableSkeleton } from "@/co
 import { ShareDialog } from "@/components/feed/ShareDialog";
 import { ReadinessCard } from "@/components/home/ReadinessCard";
 import { StoppedCard } from "@/components/home/StoppedCard";
+import { WrongCard } from "@/components/home/WrongCard";
 import { Button } from "@/components/ui/button";
-import { getFeed, listRunningAgents, type FeedItem } from "@/lib/api";
+import { getFeed, listRunningAgents, showDemo, type FeedItem } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 import { useARIA } from "@/lib/store";
 import { relativeTime } from "@/lib/format";
 import { glowOf } from "@/lib/mascot-style";
@@ -95,6 +97,12 @@ export default function HomePage() {
   const search = useSearch();
   const wanted = new URLSearchParams(search).get("share");
   const feed = useQuery({ queryKey: ["/api/local/feed"], queryFn: getFeed, refetchInterval: 5_000 });
+  const { toast } = useToast();
+  const demo = useMutation({
+    mutationFn: showDemo,
+    onSuccess: () => toast({ title: "Look at your notification", description: "Oathrion paused Nova, a pretend agent: click « Stop »." }),
+    onError: (error: Error) => toast({ title: "No notification", description: error.message, variant: "destructive" }),
+  });
   const [sharing, setSharing] = useState<FeedItem | null>(null);
   const [opened, setOpened] = useState<string | null>(null);
   /* Venu du bouton « Share » d'une notification : le partage s'ouvre tout seul, une fois. */
@@ -111,6 +119,7 @@ export default function HomePage() {
       <PageHeader title="Home" subtitle="What your AI agents are doing, and what Oathrion did about it." />
       <Hero items={feed.data ?? []} />
       <StoppedCard />
+      <WrongCard />
       <ReadinessCard />
       <RunningAgentsPanel />
       <section className="space-y-3" data-testid="feed">
@@ -124,7 +133,12 @@ export default function HomePage() {
             <EmptyState
               icon={Newspaper}
               title="Nothing yet"
-              description="When your agents act, or Oathrion steps in, it is told here, in plain words. To see what Oathrion shows when an agent acts without permission: oathrion demo"
+              description="When your agents act, or Oathrion steps in, it is told here, in plain words."
+              action={
+                <Button size="sm" className="rounded-full" disabled={demo.isPending} onClick={() => demo.mutate()} data-testid="feed-demo">
+                  See Oathrion stop an agent
+                </Button>
+              }
             />
           </Surface>
         ) : (
@@ -141,7 +155,7 @@ export default function HomePage() {
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="text-[15px] font-medium leading-snug">{item.title}</p>
-                    {item.detail ? <p className="mt-0.5 break-all font-mono text-xs text-muted-foreground">{item.detail}</p> : null}
+                    {item.detail ? <p className="mt-0.5 line-clamp-2 break-words text-[13px] text-muted-foreground">{item.detail}</p> : null}
                     <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                       <span className={cn("h-1.5 w-1.5 rounded-full", TONE[item.tone].dot)} aria-hidden />
                       {TONE[item.tone].label ? `${TONE[item.tone].label} · ` : ""}

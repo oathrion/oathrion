@@ -14,6 +14,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Download, X } from "lucide-react";
 
+import { ActionWords } from "@/components/receipts/ActionWords";
 import { Button } from "@/components/ui/button";
 import { getReceipt, getSharedReceipt } from "@/lib/api";
 import { checkReceipt } from "@/lib/receipt-check";
@@ -48,16 +49,6 @@ function clock(iso: string): string {
   return Number.isNaN(at.getTime()) ? iso : at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-/** « mcp.carnet.create_note » se lit « create note · on the carnet server » : les mêmes mots que la demande, tirés du reçu signé. */
-function spoken(what: string, target: string): string {
-  const tool = /^mcp\.([^.]+)\.(.+)$/.exec(what);
-  if (tool) return `${tool[2]!.replace(/_/g, " ")} · on the ${tool[1]!} server`;
-  /* Une commande de Claude Code : la commande, et le dossier où elle tournait (pas « shell:///… »). */
-  if (target.startsWith("shell://")) return `${what} · in ${target.slice("shell://".length)}`;
-  if (target.startsWith("file://")) return `${what} · ${target.slice("file://".length)}`;
-  return target && !target.startsWith("mcp://") ? `${what} · ${target}` : what;
-}
-
 /*
  * « Try to change it » (16 novembre, retour des premiers testeurs : « on ne comprend pas le reçu,
  * ni à quoi il sert ») : plutôt qu'un paragraphe, l'expérience. La décision inscrite est inversée
@@ -76,11 +67,11 @@ function forged(shared: SharedReceipt): SharedReceipt {
   };
 }
 
-function Row({ label, children, mono }: { label: string; children: React.ReactNode; mono?: boolean }) {
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex gap-4 py-1.5">
       <dt className="w-24 shrink-0 text-[13px] text-muted-foreground">{label}</dt>
-      <dd className={cn("min-w-0 flex-1 break-words text-[14px]", mono && "font-mono text-[13px]")}>{children}</dd>
+      <dd className="min-w-0 flex-1 break-words text-[14px]">{children}</dd>
     </div>
   );
 }
@@ -129,11 +120,10 @@ export function ReceiptMoment({ executionRef, onClose }: { executionRef: string;
         </p>
         <dl className="mt-2">
           <Row label="Agent">{action.agent}</Row>
-          <Row label="Action">{spoken(action.what, action.target)}</Row>
-          {action.impact ? <Row label="Impact">{action.impact}</Row> : null}
-          <Row label="Reference" mono>
-            {action.ref}
+          <Row label="Action">
+            <ActionWords action={action.what} target={action.target} />
           </Row>
+          {action.impact ? <Row label="Impact">{action.impact}</Row> : null}
         </dl>
       </div>
 
@@ -142,7 +132,7 @@ export function ReceiptMoment({ executionRef, onClose }: { executionRef: string;
 
       <div className="space-y-2 px-5 py-4">
         <p className="text-[13px] text-muted-foreground">
-          Sealed by your Oathrion · key <span className="font-mono text-foreground/80">{issuer.fingerprint}</span>
+          <span title={`Key ${issuer.fingerprint} · reference ${action.ref}`}>Sealed by your Oathrion</span>
         </p>
         <p className="receipt-stamp flex items-center gap-2 text-[14px] font-medium" aria-live="polite" data-testid={`receipt-verdict-${executionRef}`}>
           {!checked ? (

@@ -13,6 +13,7 @@ import { ShieldAlert, ShieldCheck } from "lucide-react";
 import { Link } from "wouter";
 
 import { Surface } from "@/components/common/primitives";
+import { ActionWords } from "@/components/receipts/ActionWords";
 import { ReceiptMoment } from "@/components/receipts/ReceiptMoment";
 import { getLocalSummary } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
@@ -53,13 +54,10 @@ export function StoppedCard() {
             <li key={key} className="px-5 py-3">
               <div className="flex items-center gap-4">
                 <div className="min-w-0 flex-1">
-                  <code className="block truncate font-mono text-[13px]" title={save.action}>
-                    {save.action}
-                  </code>
+                  <ActionWords action={save.action} target={save.target} />
                   <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
                     {save.impact ? <span className="font-semibold text-danger">Would have deleted {save.impact} · </span> : null}
                     {save.agent} · {relativeTime(save.at)}
-                    {save.detail ? ` · ${save.detail}` : ""}
                   </p>
                 </div>
                 <button

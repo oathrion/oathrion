@@ -264,7 +264,7 @@ export class TelegramPhone {
       if (item.decided === null) return;
       this.sent.delete(id!);
       this.options.feedback(item.event, choice === "right", item.decided);
-      await api.call("answerCallbackQuery", { callback_query_id: pressId, text: "Thanks: Oathrion learns from it." });
+      await api.call("answerCallbackQuery", { callback_query_id: pressId, text: choice === "right" ? "Thanks: kept on your computer, for your next feedback." : "Thanks. Tell us what it should have done: Send feedback, in the console." });
       await this.edit(api, chatId, item, `${item.caption}\n\n✓ ${item.decided}`, null);
       return;
     }

@@ -8,7 +8,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Bell, Eye, KeyRound, ShieldCheck, Smartphone, Users } from "lucide-react";
+import { Bell, Check, Copy, Eye, KeyRound, ShieldCheck, Smartphone, Users } from "lucide-react";
 
 import { PageHeader, Surface } from "@/components/common/primitives";
 import { PhonePairDialog } from "@/components/settings/PhonePairDialog";
@@ -35,7 +35,39 @@ function Row({ icon: Icon, title, state, on, children }: { icon: typeof Bell; ti
   );
 }
 
-const Command = ({ children }: { children: string }) => <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">{children}</code>;
+/*
+ * Ce qui ne se fait que dans un terminal (16 novembre, « trop de lignes de commande ») : la
+ * phrase reste en mots, et la commande n'apparaît que pour qui la demande, prête à copier.
+ */
+function InTerminal({ label, command }: { label: string; command: string }) {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  if (!open) {
+    return (
+      <button type="button" className="text-primary underline-offset-2 hover:underline" onClick={() => setOpen(true)}>
+        {label}
+      </button>
+    );
+  }
+  return (
+    <span className="mt-2 flex flex-wrap items-center gap-2">
+      <span>Paste this in a terminal:</span>
+      <button
+        type="button"
+        className="inline-flex items-center gap-2 rounded-lg border border-card-border bg-background px-2.5 py-1 font-mono text-xs text-foreground hover:border-primary"
+        onClick={() => {
+          void navigator.clipboard?.writeText(command).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          });
+        }}
+      >
+        {command}
+        {copied ? <Check className="h-3.5 w-3.5 text-success" aria-hidden /> : <Copy className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />}
+      </button>
+    </span>
+  );
+}
 
 export default function LocalSettingsPage() {
   const settings = useQuery({ queryKey: ["/api/local/settings"], queryFn: getLocalSettings });
@@ -68,7 +100,7 @@ export default function LocalSettingsPage() {
           </Row>
           <Row icon={Smartphone} title="Your phone" state={data.phone?.paired ? "Paired" : "Not paired"} on={data.phone?.paired === true}>
             {data.phone?.paired ? (
-              <>Requests reach you on Telegram (@{data.phone.bot}), with Approve and Reject, anywhere. To unpair: <Command>oathrion phone off</Command></>
+              <>Requests reach you on Telegram (@{data.phone.bot}), with Approve and Reject, anywhere. <InTerminal label="Unpair" command="oathrion phone off" /></>
             ) : (
               <span className="flex flex-wrap items-center justify-between gap-3">
                 <span>Away from your computer, your agents' requests reach your phone on Telegram, with Approve and Reject.</span>
@@ -82,25 +114,25 @@ export default function LocalSettingsPage() {
             {!linux ? (
               <>Not on this system yet. Here, your agents' actions go through Oathrion's approvals and receipts.</>
             ) : data.watch.on ? (
-              <>An AI agent started without Oathrion's protection is paused until you decide. To stop watching: <Command>oathrion watch --always --undo</Command></>
+              <>An AI agent started without Oathrion's protection is paused until you decide. <InTerminal label="Stop watching" command="oathrion watch --always --undo" /></>
             ) : (
-              <>Like an antivirus for AI agents: <Command>npx oathrion</Command> turns it on.</>
+              <>Like an antivirus for AI agents: an agent started without Oathrion is paused until you decide. <InTerminal label="Turn it on" command="npx oathrion" /></>
             )}
           </Row>
           <Row icon={ShieldCheck} title="Secrets out of reach" state={!linux ? "Linux only, for now" : data.jail.agents.length > 0 ? data.jail.agents.join(", ") : "Off"} on={data.jail.agents.length > 0}>
             {!linux ? (
               <>Not on this system yet: it is built on a Linux sandbox (bubblewrap).</>
             ) : data.jail.agents.length > 0 ? (
-              <>Started from a terminal, these agents run in a closed space: they cannot read your passwords and keys, nor go around Oathrion. To undo: <Command>oathrion jail --always --undo</Command></>
+              <>Started from a terminal, these agents run in a closed space: they cannot read your passwords and keys, nor go around Oathrion. <InTerminal label="Turn it off" command="oathrion jail --always --undo" /></>
             ) : (
-              <>Your agents run in a closed space where they cannot read your passwords and keys: <Command>npx oathrion</Command> sets it up (Linux).</>
+              <>Your agents run in a closed space where they cannot read your passwords and keys. <InTerminal label="Turn it on" command="npx oathrion" /></>
             )}
           </Row>
           <Row icon={KeyRound} title="Fake secrets (traps)" state={data.decoys.count > 0 ? `${String(data.decoys.count)} in place` : "None"} on={data.decoys.count > 0}>
             {data.decoys.count > 0 ? (
-              <>Fake passwords that no honest task reads: if an agent reads one, you are told at once. To take them away: <Command>oathrion decoys remove</Command></>
+              <>Fake passwords that no honest task reads: if an agent reads one, you are told at once. <InTerminal label="Take them away" command="oathrion decoys remove" /></>
             ) : (
-              <>Fake passwords that no honest task reads: if an agent reads one, you are told at once. <Command>oathrion decoys plant</Command> puts them in place.</>
+              <>Fake passwords that no honest task reads: if an agent reads one, you are told at once. <InTerminal label="Put them in place" command="oathrion decoys plant" /></>
             )}
           </Row>
           <Row icon={Users} title="For a team" state="Available" on={false}>

@@ -1142,7 +1142,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
    * GET /api/local/summary — LE BILAN (`server/local-summary.ts`) : sur la période
    * (`?period=today`, par défaut, ou `7d`), combien d'actions sont passées seules, ont été
    * demandées à une personne, ont été bloquées ; les actions bloquées en tête ; et la preuve —
-   * les DEUX chaînes relues en entier (reçus d'Oathrion, journal du hook Claude Code).
+   * les DEUX chaînes vérifiées (reçus d'Oathrion : le nouveau seulement, et tout toutes les 10 min,
+   * `server/local-verify.ts` ; journal du hook Claude Code, relu en entier).
    */
   app.get(
     "/api/local/summary",
@@ -1160,7 +1161,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const since = new Date(now);
       if (req.query.period === "7d") since.setTime(now.getTime() - 7 * 24 * 3_600_000);
       else since.setHours(0, 0, 0, 0);
-      const receipts = await verifyLocalReceipts();
+      const receipts = await verifyLocalReceipts({ sinceLastCheck: true });
       const journal = verifyJournal(file);
       res.json({
         period: req.query.period === "7d" ? "7d" : "today",
@@ -1487,6 +1488,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           { id: "decision", done: decided },
         ],
       });
+    }),
+  );
+
+  /*
+   * LES RÉPONSES « WAS OATHRION RIGHT? » (16 novembre, `server/local-feedback.ts`) : relues pour la
+   * page « Send feedback », que la personne envoie elle-même par e-mail. Rien ne part d'ici.
+   */
+  app.get(
+    "/api/local/feedback",
+    requireCapability("read"),
+    handle(async (_req, res) => {
+      const hub = activeHub();
+      if (!isLocalMode() || !hub) return fail(res, 404, "Not found");
+      const { readFeedback } = await import("./local-feedback");
+      res.json({ ...readFeedback(hub.dir), version: PRODUCT_VERSION, platform: process.platform });
+    }),
+  );
+
+  app.post(
+    "/api/local/feedback/shared",
+    requireCapability("read"),
+    handle(async (req, res) => {
+      const hub = activeHub();
+      if (!isLocalMode() || !hub) return fail(res, 404, "Not found");
+      const until = (req.body as { until?: unknown } | undefined)?.until;
+      if (typeof until !== "string" || Number.isNaN(Date.parse(until))) return fail(res, 400, "until must be a date");
+      const { markFeedbackShared } = await import("./local-feedback");
+      markFeedbackShared(hub.dir, until);
+      res.json({ sharedUntil: until });
     }),
   );
 

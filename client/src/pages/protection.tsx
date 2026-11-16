@@ -67,7 +67,7 @@ export default function ProtectionPage() {
       ) : data.agents.length === 0 ? (
         <Surface className="px-6 py-14 text-center">
           <h2 className="text-[20px] font-semibold tracking-[-0.02em]">No agent found on this machine.</h2>
-          <p className="mx-auto mt-1.5 max-w-sm text-[15px] text-muted-foreground">Oathrion looks for Claude Code, Cursor and Claude Desktop. Once one is installed, run <code className="font-mono text-[13px]">npx oathrion</code>.</p>
+          <p className="mx-auto mt-1.5 max-w-sm text-[15px] text-muted-foreground">Oathrion looks for Claude Code, Cursor and Claude Desktop. Once one is installed, come back here: it shows up on its own.</p>
         </Surface>
       ) : (
         <>

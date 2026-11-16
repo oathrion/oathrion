@@ -28,6 +28,7 @@ import ApprovalsPage from "@/pages/approvals";
 import IntegrationsPage from "@/pages/integrations";
 import AnalyticsPage from "@/pages/analytics";
 import FeedbackPage from "@/pages/feedback";
+import LocalFeedbackPage from "@/pages/local-feedback";
 import ConnectorsPage from "@/pages/connectors";
 import FirewallPage from "@/pages/firewall";
 import CoveragePage from "@/pages/coverage";
@@ -73,6 +74,12 @@ function SettingsOrLocal() {
   return local ? <LocalSettingsPage /> : <SettingsPage />;
 }
 
+/* En local, le retour part par un e-mail que la personne relit ; en équipe, par la base de l'organisation. */
+function FeedbackOrLocal() {
+  const local = useLocalMode();
+  return local ? <LocalFeedbackPage /> : <FeedbackPage />;
+}
+
 function AppRouter() {
   return (
     <Switch>
@@ -97,7 +104,7 @@ function AppRouter() {
       <Route path="/firewall" component={FirewallPage} />
       <Route path="/coverage" component={CoveragePage} />
       <Route path="/connectors" component={ConnectorsPage} />
-      <Route path="/feedback" component={FeedbackPage} />
+      <Route path="/feedback" component={FeedbackOrLocal} />
       <Route path="/settings" component={SettingsOrLocal} />
       <Route path="/settings/advanced" component={SettingsPage} />
       <Route path="/team" component={TeamPage} />
@@ -125,7 +132,7 @@ function App() {
           */}
           <AuthProvider>
             <ARIAProvider>
-              <Router hook={useHashPath} searchHook={useHashSearch}>
+              <Router hook={useHashPath} searchHook={useHashSearch} hrefs={(href) => `#${href}`}>
                 <AppShell>
                   <AppRouter />
                 </AppShell>

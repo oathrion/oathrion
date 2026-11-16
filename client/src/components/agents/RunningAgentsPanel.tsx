@@ -72,7 +72,7 @@ export function RunningAgentsPanel() {
       toast({
         title: what === "stop" ? `${group.agent} stopped` : what === "allow" ? `${group.agent} may run without Oathrion's protection` : `${group.agent} must run with Oathrion's protection again`,
         description:
-          what === "stop" ? `Start it again protected: « oathrion jail -- ${group.agent} ».` : what === "allow" ? "It goes on where it was. « Stop allowing », here, undoes it." : "Started without Oathrion's protection, it is paused again.",
+          what === "stop" ? "Nothing it was doing goes on." : what === "allow" ? "It goes on where it was. « Stop allowing », here, undoes it." : "Started without Oathrion's protection, it is paused again.",
       });
     } catch (error) {
       toast({ title: "That did not work", description: error instanceof Error ? error.message : String(error), variant: "destructive" });

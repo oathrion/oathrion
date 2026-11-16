@@ -3484,3 +3484,57 @@ ARM). La liste vient des fichiers de la publication sur GitHub, pas d'une suppos
 
 **Reste à vérifier :** l'installation sur une vraie machine Windows. C'est l'essai du
 testeur.
+
+### 5.78 Une heure, la veille de la préversion : l'accueil qui ralentit, et une réponse perdue
+
+**Endurance d'une heure** (`script/endurance-pivot.mjs --minutes 60`), le 16 novembre 2026 de
+21 h 36 à 22 h 36 UTC, sur `af1f3ca`. Relevés dans
+`stress-runs/endurance-1116-60/releves/`.
+
+**Le banc mis à jour avant de tourner :**
+
+- il confirme son propre programme dans la console, comme une personne : depuis le
+  9 novembre, Oathrion attend ce oui pour tout programme qu'il rencontre, et le banc
+  échouait à chaque appel après 30 s ;
+- il mesure aussi l'accueil tel que la console le charge (bilan du jour et des 7 jours,
+  activité, demandes) et le reçu partageable de la dernière action.
+
+**17 936 appels, verdict 9/9.**
+
+| Contrôle | Résultat |
+|---|---|
+| aucune erreur | ✓ 0 |
+| mémoire | ✓ en dents de scie entre 176 et 504 Mo, 271 Mo à la fin : pas de fuite |
+| descripteurs | ✓ 36 → 36 |
+| p95 | ✓ 37 → 36 ms |
+| chaîne de reçus | ✓ 17 937 reçus, intacte |
+| accueil | ✓ sous 2 s, mais 233 ms → 1,1 s (pire 1,4 s) |
+| reçu partageable | ✓ 59 → 196 ms |
+
+**Trois défauts trouvés, corrigés le soir même :**
+
+1. **Le bilan relisait toute la chaîne de reçus** à chaque appel, et la console le redemande
+   toutes les 15 s : 250 ms à 3 000 reçus, une dizaine de secondes vers 100 000.
+   - **La correction** (`server/local-verify.ts`) : entre deux relectures complètes,
+     espacées de 10 min au plus, seuls les reçus écrits depuis sont relus. Le dernier reçu
+     vérifié, l'ancre, doit être resté le même, sinon la relecture complète a lieu tout de
+     suite. `oathrion receipts verify` relit toujours tout. La console dit « Checked » et non
+     plus « Re-read just now ».
+   - **Test :** `server/test/local-verify-since.test.ts` falsifie l'ancre, puis un ancien reçu.
+   - **Mesuré** sur un banc de 15 min : l'accueil passe de 964 à 637 ms à 4 500 actions.
+2. **Une réponse « Was Oathrion right? » pouvait se perdre.** Node signale parfois la fin de
+   `notify-send` avant d'avoir livré sa sortie : la réponse était lue vide, sans erreur.
+   - C'était la cause de l'échec intermittent de `wrap-notify.test.ts`, que l'on croyait dû à
+     la charge.
+   - **La correction** (`server/notifications/desktop.ts`) attend la fin de la sortie.
+   - **Vérifié :** 8 passages sur 8, contre un échec sur trois avant.
+3. **Les liens internes porteurs de paramètres les perdaient.** Le `navigate` de wouter 3.10
+   les place avant le `#`, que la console ne lit pas. Cela touchait la carte de `/decide` vers
+   `/share`, et « Tell us what happened ».
+   - **La correction** (`client/src/lib/hash-location.ts`) les garde après le `#`.
+   - **Vérifié** dans le navigateur.
+
+**Reste ouvert : l'accueil autour d'une seconde au-delà de 5 000 actions.** Chaque bilan
+charge les 5 000 dernières actions complètes, deux fois (le jour et les 7 jours). Les compter
+dans la base, sans les charger, ramènerait l'accueil sous 100 ms. C'est le chantier d'après
+le 17.

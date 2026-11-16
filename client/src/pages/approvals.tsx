@@ -363,7 +363,7 @@ function ApprovalCard({
               {text.details.map((c) => (
                 <div key={c.label} className="flex flex-col gap-0.5 border-b border-card-border/70 px-4 py-2.5 text-[13px] last:border-b-0 sm:flex-row sm:gap-4">
                   <dt className="shrink-0 text-muted-foreground sm:w-32">{contextLabel(c.label)}</dt>
-                  <dd className="min-w-0 flex-1 break-words font-mono">{c.value}</dd>
+                  <dd className="min-w-0 flex-1 break-words">{c.value}</dd>
                 </div>
               ))}
             </dl>

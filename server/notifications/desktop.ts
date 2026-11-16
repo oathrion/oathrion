@@ -467,8 +467,24 @@ export class DesktopChannel implements NotificationChannel {
       const early = waitExit ? undefined : setTimeout(() => settle({ ok: true, detail: "started" }), 400);
       child.once("exit", (code) => {
         clearTimeout(early);
-        if (code === 0) onExit?.(stdout);
-        settle(code === 0 ? { ok: true, detail: "done" } : { ok: false, detail: `${command} answered ${String(code)}` });
+        /*
+         * « exit » peut précéder la fin de la sortie : la réponse (« right ») était alors lue vide et
+         * perdue (endurance du 16 novembre, `wrap-notify.test.ts` une fois sur trois). On attend
+         * que la sortie soit lue jusqu'au bout.
+         */
+        let finished = false;
+        const finish = () => {
+          if (finished) return;
+          finished = true;
+          if (code === 0) onExit?.(stdout);
+          settle(code === 0 ? { ok: true, detail: "done" } : { ok: false, detail: `${command} answered ${String(code)}` });
+        };
+        const out = child.stdout;
+        if (!out || out.readableEnded || out.destroyed) finish();
+        else {
+          out.once("end", finish);
+          out.once("close", finish);
+        }
       });
     });
   }

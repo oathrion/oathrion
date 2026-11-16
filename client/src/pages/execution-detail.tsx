@@ -20,6 +20,8 @@ import { ApiError } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import { currency, duration, fullDate, timeOfDay } from "@/lib/format";
 import { auditEventLabel } from "@/lib/audit-labels";
+import { useLocalMode } from "@/lib/local-mode";
+import { ActionWords } from "@/components/receipts/ActionWords";
 import { decisionLabel, reasonLabel, resultLabel } from "@/lib/server-text";
 
 const RUN_STATE_LABEL: Record<string, string> = {
@@ -46,6 +48,7 @@ const DECISION_TONE = {
 
 export default function ExecutionDetailPage() {
   const [, params] = useRoute("/executions/:id");
+  const local = useLocalMode();
   const { executions, loading, error, reload, retryExecution } = useARIA();
   const { can } = useAuth();
   const { toast } = useToast();
@@ -156,23 +159,35 @@ export default function ExecutionDetailPage() {
                 {execution.agentName}
               </Link>
             </KeyValue>
-            <KeyValue label="Action">{execution.action}</KeyValue>
-            <KeyValue label="Target">
-              <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{execution.target}</code>
-            </KeyValue>
+            <KeyValue label="Action">{local ? <ActionWords action={execution.action} target={execution.target} /> : execution.action}</KeyValue>
+            {local ? null : (
+              <KeyValue label="Target">
+                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{execution.target}</code>
+              </KeyValue>
+            )}
             <KeyValue label="Date">{fullDate(execution.timestamp)}</KeyValue>
             <KeyValue label="Duration">
               <span className="tabular">{duration(execution.durationMs)}</span>
             </KeyValue>
-            <KeyValue label="Cost">
-              <span className="tabular">{currency(execution.cost, 3)}</span>
-            </KeyValue>
+            {local ? null : (
+              <KeyValue label="Cost">
+                <span className="tabular">{currency(execution.cost, 3)}</span>
+              </KeyValue>
+            )}
           </SectionCard>
 
+          {/* En local (16 novembre) : le code brut replié, pour qui le veut. */}
           <SectionCard title="Data sent" description="What the agent submitted to Oathrion.">
-            <pre className="overflow-x-auto px-5 py-4 font-mono text-xs leading-relaxed text-muted-foreground">
-              {JSON.stringify(execution.input, null, 2)}
-            </pre>
+            {local ? (
+              <details className="px-5 py-4">
+                <summary className="cursor-pointer text-[13px] text-primary">Technical details</summary>
+                <pre className="mt-3 overflow-x-auto font-mono text-xs leading-relaxed text-muted-foreground">{JSON.stringify(execution.input, null, 2)}</pre>
+              </details>
+            ) : (
+              <pre className="overflow-x-auto px-5 py-4 font-mono text-xs leading-relaxed text-muted-foreground">
+                {JSON.stringify(execution.input, null, 2)}
+              </pre>
+            )}
           </SectionCard>
 
           <SectionCard title="Log" description="Hash-chained log of this execution. Tamper-evident: edits break the chain and are reported.">
@@ -183,7 +198,7 @@ export default function ExecutionDetailPage() {
                     {timeOfDay(a.at)}
                   </span>
                   <div className="min-w-0">
-                    <p className="font-mono text-xs font-medium">{auditEventLabel(a.event)}</p>
+                    <p className="text-[13px] font-medium">{auditEventLabel(a.event)}</p>
                     <p className="mt-0.5 text-sm text-muted-foreground">{a.detail ? reasonLabel(a.detail) : null}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground/70">{a.actor}</p>
                   </div>

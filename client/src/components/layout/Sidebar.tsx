@@ -99,6 +99,8 @@ export function Sidebar({
     { href: "/agents", label: "Agents", icon: Bot },
     { href: "/protection", label: "Protection", icon: ShieldHalf },
     { href: "/settings", label: "Settings", icon: Settings },
+    /* 16 novembre : « la qualité du logiciel sera celle des retours » ; toujours à portée. */
+    { href: "/feedback", label: "Send feedback", icon: MessageSquare },
   ];
   /*
    * 16 novembre (la passe de concentration) : un développeur seul avec son agent n'a que faire des

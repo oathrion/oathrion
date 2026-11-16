@@ -23,7 +23,7 @@ const TITLES: { match: (p: string) => boolean; label: string }[] = [
   { match: (p) => p.startsWith("/connectors"), label: "Connectors" },
   { match: (p) => p.startsWith("/integrations"), label: "Integrations (catalogue)" },
   { match: (p) => p.startsWith("/analytics"), label: "Analytics" },
-  { match: (p) => p.startsWith("/feedback"), label: "Your feedback" },
+  { match: (p) => p.startsWith("/feedback"), label: "Feedback" },
   { match: (p) => p.startsWith("/settings"), label: "Settings" },
   { match: (p) => p.startsWith("/activity"), label: "Activity" },
   { match: (p) => p.startsWith("/protection"), label: "Protection" },

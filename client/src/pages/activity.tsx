@@ -17,9 +17,11 @@ import { Download, FileCheck2, History, ShieldAlert, ShieldCheck, ShieldX } from
 
 import { Pill } from "@/components/common/badges";
 import { EmptyState, ErrorState, PageHeader, Surface, TableSkeleton } from "@/components/common/primitives";
+import { ActionWords } from "@/components/receipts/ActionWords";
 import { getLocalActivity, getLocalSummary, getSharedReceipt, type ActivityEntry, type ActivityOutcome, type LocalSummary } from "@/lib/api";
 import { toCsv } from "@/lib/activity-export";
 import { relativeTime } from "@/lib/format";
+import { plainDetail } from "@/lib/plain-action";
 
 const OUTCOME: Record<ActivityOutcome, { label: string; tone: "success" | "warning" | "danger" | "info" | "neutral" }> = {
   done: { label: "Done", tone: "success" },
@@ -85,14 +87,14 @@ function Row({ entry }: { entry: ActivityEntry }) {
       </time>
       <span className="text-sm font-medium">{entry.agent}</span>
       <div className="min-w-0">
-        <code className="block truncate font-mono text-xs" title={entry.action}>
-          {entry.action}
-        </code>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-          {entry.source === "claude-code" ? "Run by Claude Code itself, checked by Oathrion's hook" : "Through Oathrion"}
-          {entry.detail ? ` · ${entry.detail}` : ""}
-          {entry.impact ? ` · would have deleted ${entry.impact}` : ""}
-        </p>
+        <ActionWords action={entry.action} target={entry.target} />
+        {entry.impact || entry.detail ? (
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {entry.impact ? <span className="font-semibold text-danger">Would have deleted {entry.impact}</span> : null}
+            {entry.impact && plainDetail(entry.detail) ? " · " : ""}
+            {plainDetail(entry.detail)}
+          </p>
+        ) : null}
       </div>
       <Pill tone={outcome.tone} dot>
         {outcome.label}
@@ -128,7 +130,7 @@ function Proof({ proof }: { proof: LocalSummary["proof"] }) {
         <ShieldCheck className="mt-px h-4 w-4 shrink-0 text-success" aria-hidden />
         <span>
           <span className="font-medium">Nothing has been changed, removed or reordered.</span>{" "}
-          <span className="text-muted-foreground">Re-read just now: {parts.join(" and ")}.</span>
+          <span className="text-muted-foreground">Checked: {parts.join(" and ")}.</span>
         </span>
       </p>
     );
@@ -210,13 +212,10 @@ function Summary() {
             {data.saves.map((save) => (
               <li key={`${save.source}-${save.ref}`} className="flex items-center gap-4 py-2.5 first:pt-0 last:pb-0">
                 <div className="min-w-0 flex-1">
-                  <code className="block truncate font-mono text-[13px]" title={save.action}>
-                    {save.action}
-                  </code>
+                  <ActionWords action={save.action} target={save.target} />
                   <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
                     {save.impact ? <span className="font-semibold text-danger">Would have deleted {save.impact} · </span> : null}
                     {save.agent} · {relativeTime(save.at)}
-                    {save.detail ? ` · ${save.detail}` : ""}
                   </p>
                 </div>
                 <ShareReceipt entry={save} />
