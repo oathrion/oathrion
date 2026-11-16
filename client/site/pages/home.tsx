@@ -181,7 +181,8 @@ export default function HomePage(): JSX.Element {
               poster="/media/oathrion-demo.jpg"
               onPlay={() => track(EVENTS.ctaClick, { from: "demo", to: "video", label: "play" })}
             >
-              <source src="/media/oathrion-demo.webm" type="video/webm" />
+              {/* Versionnée : le cache des navigateurs garde une vidéo 4 h sous la même adresse. */}
+              <source src="/media/oathrion-demo-v6.webm" type="video/webm" />
             </video>
           </div>
         </div>
