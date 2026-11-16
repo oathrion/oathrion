@@ -78,6 +78,7 @@ if (!available) {
       try {
         await migratePostgres(url.toString(), MIGRATIONS);
         const pool = new Pool({ connectionString: url.toString(), max: 1 });
+        pool.on("error", () => undefined);
         const { rows } = await pool.query(
           `SELECT a.attname AS column
              FROM pg_index i
