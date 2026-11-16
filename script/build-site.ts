@@ -26,6 +26,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { PAGES } from "../client/site/lib/pages-meta";
 
 //
 // `fileURLToPath(import.meta.url)` plutôt que `import.meta.dirname`, qui n'existe qu'à
@@ -140,8 +141,44 @@ while (queue.length > 0) {
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(path.join(OUT, "assets"), { recursive: true });
 
+/*
+ * Un HTML PAR PAGE, avec son titre, sa description et sa propre adresse canonique.
+ *
+ * Sans cela, les quinze adresses recevaient le même fichier, `canonical` vers l'accueil :
+ * pour un moteur de recherche, quinze copies de l'accueil, donc rien à indexer. Le contenu
+ * reste rendu par le même script ; seules les balises de tête changent.
+ */
+const escapeAttr = (text: string) => text.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+function pageHtml(route: string): string {
+  const meta = PAGES[route];
+  if (!meta) fail(`aucun titre pour ${route} dans client/site/lib/pages-meta.ts`);
+  const url = `${origin || PLACEHOLDER}${route}`;
+  let out = html;
+  const swaps: [RegExp, string][] = [
+    [/<title>[^<]*<\/title>/, `<title>${escapeAttr(meta.title)}</title>`],
+    [/(name="description"\s+content=")[^"]*"/, `$1${escapeAttr(meta.description)}"`],
+    [/(property="og:description"\s+content=")[^"]*"/, `$1${escapeAttr(meta.description)}"`],
+    [/(name="twitter:description"\s+content=")[^"]*"/, `$1${escapeAttr(meta.description)}"`],
+    [/(property="og:title" content=")[^"]*"/, `$1${escapeAttr(meta.title)}"`],
+    [/(name="twitter:title" content=")[^"]*"/, `$1${escapeAttr(meta.title)}"`],
+    [/(rel="canonical" href=")[^"]*"/, `$1${url}"`],
+    [/(property="og:url" content=")[^"]*"/, `$1${url}"`],
+  ];
+  for (const [pattern, value] of swaps) {
+    if (!pattern.test(out)) fail(`balise introuvable dans le HTML du site : ${String(pattern)}`);
+    out = out.replace(pattern, value);
+  }
+  return out;
+}
+
 // Le HTML du site devient la racine : c'est tout l'intérêt de l'opération.
-fs.writeFileSync(path.join(OUT, "index.html"), html);
+fs.writeFileSync(path.join(OUT, "index.html"), pageHtml("/"));
+// `product.html` et non `product/index.html` : Cloudflare Pages sert le premier à `/product`
+// tel quel, et redirige le second vers `/product/`, ce qui contredirait l'adresse canonique.
+for (const route of Object.keys(PAGES)) {
+  if (route === "/") continue;
+  fs.writeFileSync(path.join(OUT, `${route.slice(1)}.html`), pageHtml(route));
+}
 
 let bytes = 0;
 for (const name of seen) {
@@ -186,11 +223,7 @@ fs.writeFileSync(path.join(OUT, "vercel.json"),
  * `robots.txt` : il manquait, et sans lui une page de conditions ou une page 404 se
  * retrouve indexée aussi bien que l'accueil.
  */
-const ROUTES = [
-  "/", "/product", "/how-it-works", "/use-cases", "/agent-payments", "/developers", "/pricing",
-  "/pilot", "/waitlist", "/about", "/roadmap", "/security", "/contact",
-  "/terms", "/privacy",
-];
+const ROUTES = Object.keys(PAGES);
 
 fs.writeFileSync(
   path.join(OUT, "robots.txt"),

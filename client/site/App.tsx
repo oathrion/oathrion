@@ -14,6 +14,7 @@ import { useEffect } from "react";
 import { Route, Switch, useLocation } from "wouter";
 import { Footer, Nav } from "./components/Shell";
 import { pageView } from "./lib/analytics";
+import { PAGES } from "./lib/pages-meta";
 
 import HomePage from "./pages/home";
 import PilotPage from "./pages/pilot";
@@ -50,6 +51,12 @@ function Navigation(): null {
 
   useEffect(() => {
     pageView(location);
+  }, [location]);
+
+  // Le titre de l'onglet suit la page (le HTML servi le porte déjà au premier chargement).
+  useEffect(() => {
+    const meta = PAGES[location];
+    if (meta) document.title = meta.title;
   }, [location]);
 
   return null;
