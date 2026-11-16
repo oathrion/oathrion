@@ -12,7 +12,7 @@ import type { ChildProcess } from "node:child_process";
 
 import { describe, expect, it } from "vitest";
 
-import { HOUR_PASS_MS, HourPasses, passable } from "../local-hour-passes";
+import { HOUR_PASS_MS, HourPasses, judgeHourPassesBy, passable } from "../local-hour-passes";
 import { registerLocalNotifications } from "../local-notifications";
 import { Notifier } from "../notifications";
 import { notificationActions } from "../notifications/desktop";
@@ -38,6 +38,22 @@ describe("la permission d'une heure", () => {
     expect(again.covers("agt_cursor", "mcp.fichiers.write_file")?.until).toBe("2026-11-16T11:00:00.000Z");
     now += HOUR_PASS_MS + 1;
     expect(again.covers("agt_cursor", "mcp.fichiers.write_file")).toBeNull();
+  });
+
+  it("jamais pour un outil destructif : il est demandé à chaque fois (recette du 16 novembre)", () => {
+    judgeHourPassesBy((action) => (action.endsWith(".delete_file") ? "destructive" : action.endsWith(".write_file") ? "write" : null));
+    try {
+      expect(passable("mcp.fichiers.write_file")).toBe(true);
+      expect(passable("mcp.fichiers.delete_file")).toBe(false);
+      /* Un outil que le pivot ne connaît pas (serveur arrêté) : aucune permission non plus. */
+      expect(passable("mcp.fichiers.unknown_tool")).toBe(false);
+      const passes = new HourPasses(freshDir());
+      expect(() => passes.grant("agt_cursor", "mcp.fichiers.delete_file")).toThrow(/destructive one is asked every time/);
+      const ask = notificationActions({ id: "e", type: "approval.requested", at: "", title: "", summary: "", risk: "high", agentId: "a", agentName: "a", executionId: "x", approvalId: "apr", policyId: null, policyName: null, data: { action: "mcp.fichiers.delete_file" } });
+      expect(ask.map((a) => a.id)).toEqual(["approve", "reject"]);
+    } finally {
+      judgeHourPassesBy(null);
+    }
   });
 
   it("le bouton n'apparaît que pour un outil d'un serveur derrière Oathrion", () => {

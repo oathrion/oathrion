@@ -525,6 +525,13 @@ export class LocalHub {
     return false;
   }
 
+  /** La classe d'un outil d'un serveur de ce pivot (`mcp.<serveur>.<outil>`) : read, write, destructive ; `null` inconnu. */
+  toolClassOf(action: string): string | null {
+    const server = /^mcp\.([a-z0-9][a-z0-9_-]*)\./.exec(action)?.[1];
+    if (!server) return null;
+    return this.servers.get(server)?.tool.entries().find((candidate) => candidate.verb === action)?.toolClass ?? null;
+  }
+
   /**
    * « Décider une fois », pour toujours : seulement pour une ÉCRITURE d'un serveur de ce pivot.
    * Une lecture n'en a pas besoin ; une destruction demande une personne à chaque fois.

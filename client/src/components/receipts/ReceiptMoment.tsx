@@ -52,6 +52,9 @@ function clock(iso: string): string {
 function spoken(what: string, target: string): string {
   const tool = /^mcp\.([^.]+)\.(.+)$/.exec(what);
   if (tool) return `${tool[2]!.replace(/_/g, " ")} · on the ${tool[1]!} server`;
+  /* Une commande de Claude Code : la commande, et le dossier où elle tournait (pas « shell:///… »). */
+  if (target.startsWith("shell://")) return `${what} · in ${target.slice("shell://".length)}`;
+  if (target.startsWith("file://")) return `${what} · ${target.slice("file://".length)}`;
   return target && !target.startsWith("mcp://") ? `${what} · ${target}` : what;
 }
 

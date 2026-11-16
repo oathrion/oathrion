@@ -1732,7 +1732,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const approval = await repositories.approvals.findById(approvalId);
       const execution = approval?.executionId ? await repositories.executions.findById(approval.executionId) : undefined;
       const { HourPasses, passable, untilClock } = await import("./local-hour-passes");
-      if (!approval || !execution || !passable(execution.action)) return fail(res, 404, "Only a tool of a server behind Oathrion can be allowed for an hour.");
+      if (!approval || !execution || !passable(execution.action)) return fail(res, 404, "Only a write tool of a server behind Oathrion can be allowed for an hour; a destructive one is asked every time.");
       const pass = new HourPasses(hub.dir).grant(approval.agentId, execution.action);
       res.json({ until: pass.until, clock: untilClock(pass) });
     }),

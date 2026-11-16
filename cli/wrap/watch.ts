@@ -119,6 +119,15 @@ export function watchInstaller(options: {
   };
 }
 
+export const WATCH_USAGE = `
+oathrion watch                     watch now, until Ctrl+C: an AI agent started outside
+                                   Oathrion's protection is paused, and you are asked (Linux)
+oathrion watch --always            the same, from every session (a user service)
+oathrion watch --always --undo     turn it off
+oathrion watch --forget <agent>    no longer allow an agent outside the jail
+                                   (without a name: list those allowed)
+`;
+
 export async function runWatch(
   argv: readonly string[],
   io: { out: (line: string) => void; err: (line: string) => void; env: NodeJS.ProcessEnv; home: string; script: string; installer?: WatchInstaller },

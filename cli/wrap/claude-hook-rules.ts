@@ -92,6 +92,9 @@ export const RULE_IDS = [
   "tainted-session",
   "decoy",
   "server-token",
+  "rsync-delete",
+  "docker-prune",
+  "rm-git-history",
 ] as const;
 
 const PREFIX = "Oathrion";
@@ -353,6 +356,61 @@ function judgeShell(command: string, ctx: RuleContext): { verdict: HookVerdict; 
         /* « dossier/* » vise le contenu du dossier : on mesure le dossier. */
         const deleting = targets.map((t) => resolve(cwd, expandHome(t.replace(/\/?\*$/, "") || "/", ctx.home)));
         return { verdict: "deny", rule: "rm-outside-project", reason: `${PREFIX} refuses a recursive delete outside the project (${outside}).`, deleting };
+      }
+    }
+
+    /*
+     * Effacer l'historique git du projet (16 novembre, d'après un vrai signalement :
+     * anthropics/claude-code#107274, « 12+ months of git history lost »). Le `.git` est DANS le
+     * projet, donc libre pour `rm-outside-project` ; rien ne le restaure. Un fichier sous `.git`
+     * (`rm .git/index.lock`) reste ordinaire.
+     */
+    if (on("rm-git-history") && base === "rm") {
+      const recursive = args.some((a) => a === "--recursive" || (/^-[a-zA-Z]+$/.test(a) && /[rR]/.test(a)));
+      const history = args.filter((a) => !a.startsWith("-")).find((t) => t.replace(/\/+$/, "").split("/").pop() === ".git");
+      if (recursive && history !== undefined) {
+        return { verdict: "ask", rule: "rm-git-history", reason: `${PREFIX}: this deletes the project's git history (${history}), which nothing can restore. Allow it?` };
+      }
+    }
+
+    /*
+     * `rsync --delete` (16 novembre, d'après anthropics/claude-code#109735 : une destination en
+     * variable, vide, et rsync a synchronisé dans `/`, effaçant un disque entier). Comme `rm -rf` :
+     * la racine ou hors du projet est refusé, avec ce qui serait effacé ; une destination
+     * qu'Oathrion ne peut pas lire (`$DEST`, `` `…` ``) demande une personne, puisqu'elle peut
+     * être vide. Une destination distante (`hôte:chemin`) relève des règles de ce qui sort.
+     */
+    if (on("rsync-delete") && base === "rsync" && args.some((a) => /^--del(ete)?(-[a-z-]+)?$/.test(a))) {
+      const positional = args.filter((a) => !a.startsWith("-"));
+      const destination = positional.length >= 2 ? positional[positional.length - 1]! : undefined;
+      const remote = destination !== undefined && (/^[^/\s]+:/.test(destination) || destination.startsWith("rsync://"));
+      if (destination !== undefined && !remote) {
+        if (destination.includes("$") || destination.includes("`")) {
+          return { verdict: "ask", rule: "rsync-delete", reason: `${PREFIX}: rsync --delete into ${destination}, a path Oathrion cannot read. If it is empty, rsync deletes from the root of the disk. Allow it?` };
+        }
+        const target = destination.replace(/\/+$/, "") || "/";
+        if (target === "/" || !freeToTouch(target, ctx, cwd)) {
+          return { verdict: "deny", rule: "rsync-delete", reason: `${PREFIX} refuses rsync --delete outside the project (${destination}): it deletes what the source does not have.`, deleting: [resolve(cwd, expandHome(target, ctx.home))] };
+        }
+      }
+    }
+
+    /*
+     * Les données de Docker effacées pour de bon (16 novembre, d'après
+     * anthropics/claude-code#107655 : un « volume prune » a détruit la base d'un autre projet).
+     * `prune`, `volume rm`, `compose down -v` : demandés, car ils touchent aussi ce qui n'appartient
+     * pas à la tâche.
+     */
+    if (on("docker-prune") && (base === "docker" || base === "podman" || base === "docker-compose")) {
+      const positional = args.filter((a) => !a.startsWith("-"));
+      /* La sous-commande connue, où qu'elle soit : `docker --context prod volume rm` (« prod » est la valeur d'une option). */
+      const at = positional.findIndex((a) => ["system", "volume", "container", "image", "network", "builder", "compose"].includes(a));
+      const [first, second] = base === "docker-compose" ? ["compose", positional[0]] : at < 0 ? [undefined, undefined] : [positional[at], positional[at + 1]];
+      const prune = (first === "system" || first === "volume" || first === "container" || first === "image" || first === "network" || first === "builder") && second === "prune";
+      const volumeRm = first === "volume" && (second === "rm" || second === "remove");
+      const composeDown = first === "compose" && second === "down" && args.some((a) => a === "-v" || a === "--volumes");
+      if (prune || volumeRm || composeDown) {
+        return { verdict: "ask", rule: "docker-prune", reason: `${PREFIX}: this deletes Docker data for good${prune || composeDown ? ", including data that may belong to other projects" : ""}. Allow it?` };
       }
     }
 

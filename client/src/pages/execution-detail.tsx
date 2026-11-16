@@ -149,7 +149,7 @@ export default function ExecutionDetailPage() {
       />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <SectionCard title="Request" bodyClassName="grid gap-x-8 px-5 sm:grid-cols-2">
             <KeyValue label="Agent">
               <Link href={`/agents/${execution.agentId}`} className="text-primary hover:opacity-70">
@@ -193,7 +193,7 @@ export default function ExecutionDetailPage() {
           </SectionCard>
         </div>
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <SectionCard title="Decision" description="What the policy engine decided.">
             <div className="space-y-4 px-5 py-4">
               <Pill tone={DECISION_TONE[execution.decision]} dot className="text-sm">

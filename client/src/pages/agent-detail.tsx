@@ -124,7 +124,8 @@ export default function AgentDetailPage() {
       />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-6">
+        {/* min-w-0 : sur un téléphone, le tableau des exécutions élargissait la colonne au-delà de l'écran (recette du 16 novembre). */}
+        <div className="min-w-0 space-y-6">
           <SectionCard title="Overview" bodyClassName="grid gap-x-8 px-5 sm:grid-cols-3">
             {/* En local (16 novembre) : ni fournisseur, ni modèle, ni coûts, ni taux de réussite ; ce sont des notions de la version équipe. */}
             {local ? null : (
@@ -195,7 +196,7 @@ export default function AgentDetailPage() {
           </SectionCard>
         </div>
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           {/*
             En local, les règles valent pour tous les agents (celles des serveurs) : « No policy
             attached — no extra guardrail » faisait croire à un agent sans protection.

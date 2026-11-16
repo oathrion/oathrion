@@ -24,7 +24,7 @@ import { jailReadiness, runJail } from "./wrap/jail";
 import { jailAlwaysInstaller } from "./wrap/jail-always";
 import { runJailInside } from "./wrap/jail-net";
 import { launchingAgent } from "../server/local-agent-watch";
-import { runWatch, watchInstaller } from "./wrap/watch";
+import { runWatch, watchInstaller, WATCH_USAGE } from "./wrap/watch";
 import { runBridge } from "./wrap/bridge";
 import { runClaudeHook } from "./wrap/claude-hook";
 import { runInstall } from "./wrap/install";
@@ -40,6 +40,21 @@ import { runBundle } from "./wrap/bundle";
 import { runReceipt, runReceipts } from "./wrap/receipts";
 import { runSetup, SETUP_FLAGS } from "./wrap/setup";
 import { runTools } from "./wrap/tools";
+import { BRIDGE_USAGE } from "./wrap/bridge";
+import { BUNDLE_USAGE } from "./wrap/bundle";
+import { HOOK_USAGE } from "./wrap/claude-hook";
+import { CONSOLE_USAGE } from "./wrap/console";
+import { DECOYS_USAGE } from "./wrap/decoys";
+import { DEMO_USAGE } from "./wrap/demo";
+import { WRAP_USAGE } from "./wrap/index";
+import { INSTALL_USAGE } from "./wrap/install";
+import { JAIL_USAGE } from "./wrap/jail";
+import { NOTIFICATIONS_USAGE } from "./wrap/notifications";
+import { PHONE_USAGE } from "./wrap/phone";
+import { RECEIPT_USAGE, RECEIPTS_USAGE } from "./wrap/receipts";
+import { RETOUR_USAGE } from "./wrap/retour";
+import { TOOLS_USAGE } from "./wrap/tools";
+
 
 /* eslint-disable no-console */
 /*
@@ -136,7 +151,39 @@ const confirm = async (question: string, defaultYes = false): Promise<boolean | 
   if (answer === "") return defaultYes;
   return answer === "o" || answer === "oui" || answer === "y" || answer === "yes";
 };
-if (argv[0] === "wrap") {
+/*
+ * `oathrion <commande> --help` (recette du 16 novembre) : `jail --help` lançait « --help » comme
+ * un agent, `feedback --help` en faisait le titre d'un retour, `console --help` répondait
+ * « Unknown option ». L'aide de la commande, rien d'autre — seulement quand `--help` est son seul
+ * argument : `oathrion wrap -- serveur --help` reste aux arguments du serveur.
+ */
+const SUBCOMMAND_USAGE: Record<string, string> = {
+  wrap: WRAP_USAGE,
+  bridge: BRIDGE_USAGE,
+  pont: BRIDGE_USAGE,
+  install: INSTALL_USAGE,
+  feedback: RETOUR_USAGE,
+  retour: RETOUR_USAGE,
+  notifications: NOTIFICATIONS_USAGE,
+  phone: PHONE_USAGE,
+  telephone: PHONE_USAGE,
+  console: CONSOLE_USAGE,
+  tools: TOOLS_USAGE,
+  hook: HOOK_USAGE,
+  receipt: RECEIPT_USAGE,
+  receipts: RECEIPTS_USAGE,
+  jail: JAIL_USAGE,
+  demo: DEMO_USAGE,
+  decoys: DECOYS_USAGE,
+  watch: WATCH_USAGE,
+};
+const asksHelp = (arg: string | undefined) => arg === "--help" || arg === "-h";
+const helpFor =
+  argv.length === 2 && asksHelp(argv[1]) ? SUBCOMMAND_USAGE[argv[0]!] : argv.length === 3 && argv[0] === "receipt" && argv[1] === "bundle" && asksHelp(argv[2]) ? BUNDLE_USAGE : undefined;
+if (helpFor !== undefined) {
+  console.log(helpFor.trim());
+  process.exit(0);
+} else if (argv[0] === "wrap") {
   void runWrap(argv.slice(1), process.env).then((code) => process.exit(code));
 } else if (argv[0] === undefined || SETUP_FLAGS.has(argv[0]) || (argv[0] === "install" && argv.length === 1)) {
   /* `npx oathrion` : tout trouver, tout montrer, une réponse. */

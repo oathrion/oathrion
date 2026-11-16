@@ -102,14 +102,14 @@ export function parseArgs(argv: string[]): ParsedArgs {
     if (token === "health" || token === "evaluate" || token === "config") {
       command = token;
     } else {
-      throw new UsageError(
-        `Unknown command "${token}". Available: health, evaluate, config.`,
-      );
+      /* 16 novembre : « Available: health, evaluate, config » laissait croire que c'étaient les seules commandes. */
+      throw new UsageError(`Unknown command "${token}". Run \`oathrion --help\` for all commands.`);
     }
   }
 
   if (flags.version) return { command: "version", flags };
-  if (command === null || flags.help) return { command: command ?? "help", flags };
+  /* `oathrion evaluate --help` : l'aide, pas une évaluation qui réclame d'abord une URL. */
+  if (command === null || flags.help) return { command: "help", flags };
   return { command, flags };
 }
 

@@ -90,7 +90,9 @@ async function main(): Promise<void> {
     }, knob("OATHRION_LOCAL_HUB_SWEEP_MS"));
     /* Prévenir l'approbateur : le bureau par défaut, Slack s'il est configuré (`server/local-notifications.ts`). */
     const { readNotificationSettings, registerLocalNotifications } = await import("./local-notifications");
-    const { HourPasses } = await import("./local-hour-passes");
+    const { HourPasses, judgeHourPassesBy } = await import("./local-hour-passes");
+    /* « Allow 1 hour » : pour un outil d'écriture seulement ; le pivot connaît la classe de chaque outil. */
+    judgeHourPassesBy((action) => hub.toolClassOf(action));
     const { notifier } = await import("./notifications");
     const { existsSync: exists } = await import("node:fs");
     const { dirname: parentOf, join: joinPath } = await import("node:path");

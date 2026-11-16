@@ -124,9 +124,12 @@ still checks it.
   notification. The choice holds for the whole agent (« Claude Code » and `claude` are one) and
   shows at once in the notifications, the feed, the share card and the console. Kept on the
   machine (`mascot-choices.json`).
-- **The console looks like the notifications**: dark by default (light still one click away),
-  the shield, each agent's mascot in a halo of its colour, and how protected the machine is,
-  always in view at the foot of the menu.
+- **The console looks like the site**: light by default (dark, neutral, one click away), the
+  Source fonts shipped in the package (SIL Open Font License, in `NOTICE`; nothing loaded from
+  the network), a menu of words without icons, each agent's mascot, and how protected the
+  machine is, always in view at the foot of the menu. Nothing moves under the pointer any more:
+  cards no longer lift on hover, and notices that load late sit below the requests, so a click
+  on « Approve » or « Reject » lands where you aimed.
 - **`oathrion demo`: see it in ten seconds.** Shows Oathrion's notification on a pretend
   agent, Nova: nothing real is paused. Click « Stop », then « Share it ». `--decoy` shows the
   red one, for a decoy read. `npx oathrion` suggests it at the end.
@@ -136,14 +139,17 @@ still checks it.
   card (1200 × 630) is copied to the clipboard and the network opens with the text; paste the
   card in your post. A decoy read comes in red, with « See what happened ». What is shared
   says nothing private.
-- **A simpler console, with a news feed and a Share button** (local). Five pages instead of
-  eleven: Home, Approvals, Agents, Protection, Settings; the rest (activity, servers, executions,
-  policies, analytics, the team version, advanced settings) under « Details ». Home is the
-  news feed: what Oathrion did and what you decided, in plain sentences, with each agent's
-  mascot; repeats are grouped. « Running now » shows one line per agent and state, details
-  folded away. Settings shows how each protection stands (notifications, the watch, the jail,
-  decoys). **Share**, on any feed item and in Oathrion's notification window, makes a card to
-  post (the mascot, a sentence, the date, « Protected by Oathrion ») with nothing private on
+- **A simpler console, with a news feed** (local). Five pages: Home, Approvals, Agents,
+  Protection, Settings; « Details » keeps Activity, Servers and Policies (the pages of the team
+  version stay reachable, out of the menu; an agent's page no longer shows payment mandates,
+  costs or team scopes). Home answers three questions: are my agents protected, does anything
+  wait for me (only what waits now), and **what did Oathrion stop**, each with its receipt one
+  click away; then the 8 latest events, in plain sentences (« asked to create note on the
+  carnet server; you approved »), with each agent's mascot. « Running now » shows one line per
+  agent and state, details folded away. Settings shows how each protection stands
+  (notifications, your phone, agents started without Oathrion, secrets out of reach, fake
+  secrets). **Share**, on the moments Oathrion protected you and in its notification window,
+  makes a card to post (the mascot, a sentence, the date, « Protected by Oathrion ») with nothing private on
   it: no path, file name, command or process number; download it, copy the text, or send it
   to X, LinkedIn or WhatsApp. A paused agent you then stop (`kill`, Ctrl+C) is thawed so it
   really stops.
@@ -223,23 +229,40 @@ still checks it.
   file, signed (Ed25519, a key created on first use, readable by you only), that anyone opens
   in a browser and sees **Verified** or **Altered**, with nothing to install.
   `oathrion receipt verify <file>` is the same check without trusting the page.
-- **The summary.** The console opens on « Activity »: today or the last 7 days, what went
-  through, what asked a person, what Oathrion blocked, with both chains re-read there and then.
+- **The receipt, the moment you decide.** After « Approve » or « Reject » in the console, the
+  request turns into its signed receipt — what was done, by which agent, sealed by your
+  Oathrion — and **your browser checks the seal** there and then. « Try to change it » flips
+  the decision in a copy, and the browser answers that it was changed after it was sealed.
+  Each past decision keeps its receipt; on Linux, Oathrion's window offers « Your signed
+  receipt » after you decide.
+- **The summary.** « Activity »: today or the last 7 days, what went through, what asked a person, what Oathrion blocked, with both chains re-read there and then.
   A recursive delete Oathrion refused says what it would have deleted (« would have deleted
   48,312 files (3.2 GB) »), measured read-only, capped.
 - **Claude Code's own shell and file edits are checked.** `npx oathrion` installs a hook, once,
   for all projects, as soon as Claude Code is on the machine: obviously dangerous commands are
-  refused, `git push` and publishing are asked, and everything goes to a chained journal. In
+  refused, `git push` and publishing are asked, and everything goes to a chained journal. Three
+  rules come from real reports where nothing stopped the agent: `rsync --delete` into the root
+  or outside the project is refused, and asked when its destination is a variable Oathrion
+  cannot read (it may be empty); `docker … prune`, `volume rm` and `compose down -v` are asked;
+  deleting the project's `.git` is asked. In
   auto mode, Oathrion asks a person itself, in the console or through a notification. It reads
   the command line, not what a script will do; file reads are not checked.
 - **« Activity » and « Protection ».** One timeline of everything your agents did, through
   Oathrion and by Claude Code itself, exportable as JSON or CSV; and, agent by agent, what
   Oathrion covers on this machine and what it cannot see.
-- **Fewer interruptions.** Requests close together become one notification; after three
-  approvals in a row of the same tool, the console offers to decide once. An answer to the
+- **Fewer interruptions, and you know what you approve.** A notification says what the agent
+  wants to do, on what exactly, and why Oathrion asks (« “Invoice F-2026-114 paid” · Why: your
+  rule “carnet: every write waits for approval” »); on the phone, without the content.
+  Requests close together become one notification, which lists them. **« Allow 1 hour »**, on
+  the notification, the phone and the console, lets this agent use this tool for an hour
+  without asking: each request still goes through the rules and leaves its receipt, approved
+  in the name of that permission; it expires even across a restart, and never covers Claude
+  Code's own commands. After three approvals in a row of the same tool, the console offers to
+  decide once. An answer to the
   question in your client still counts after the agent was told to wait.
-- **A calmer console.** It uses your system's font and no longer loads any font from the
-  network; approvals read as sentences (« Cursor wants to create note »).
+- **A calmer console.** No font loaded from the network; approvals, notifications and the feed
+  read as sentences (« Cursor wants to create note on the carnet server »), with no jargon
+  (« running without Oathrion's protection », not « outside the jail »).
 - **Fixed, found on real machines:** after the machine slept, a relay could keep a revoked key
   and refuse every call until restarted; the console answered « Not Found » when Oathrion was
   installed under a hidden folder (`~/.nvm/…`); a hook installed in both a project and the user
@@ -256,6 +279,20 @@ still checks it.
   100,000th of the month — locally it now measures without refusing; each call summed the
   day's spend even with no daily budget, and slowed down as the day went on; the local log
   kept the start of each tool answer — it now keeps status lines only.
+- **Pair your phone from the console.** « Pair my phone » (Settings, or the setup card on
+  Home): BotFather opened in Telegram Web on this computer, the messages to send copied in one
+  click, the token pasted and checked, then a QR code to scan; the console sees the pairing
+  arrive and sends a test. The phone stays optional; pairing in one scan, without making a
+  bot, is next.
+- **Fixed, found on a slow connection:** `npx -y <package>` asked the npm registry at every
+  start, even for a cached package (16 s once, more than 60 s sometimes), so a different server
+  failed to start each time. A server started by `npx` now prefers the cache
+  (`npm_config_prefer_offline`), and asks the registry only when the package is missing; a
+  setting of yours (`prefer-offline` or `prefer-online`) is kept.
+- **Fixed:** a dialog taller than the screen cut its title and buttons (it now scrolls); « New
+  policy » opened, locally, on refunds and euros (it now opens on « Ask me first », with tool
+  examples); « Needs you » counted events of the last 24 hours, even settled ones (it now counts
+  what waits); refusing a request also listed « Oathrion blocked » (only « you refused » now).
 - **Fixed:** a server started from a relative path was not found; approving an action whose
   server is not running consumed the approval (now `409`, the request stays pending); a slow
   server start (`npx`) could cost the client its key.

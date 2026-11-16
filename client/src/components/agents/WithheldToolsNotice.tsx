@@ -77,7 +77,7 @@ export function WithheldToolsNotice({ agentId }: { agentId?: string }) {
                 <span className="font-mono text-xs">{entry.tools.map((tool) => tool.name).join(", ")}</span>
               </p>
               <p className="text-muted-foreground">
-                {destructive ? "They can destroy things: delete, overwrite, move or run. " : ""}
+                {destructive ? `${entry.tools.length > 1 ? "They" : "It"} can destroy things: delete, overwrite, move or run. ` : ""}
                 If you show {entry.tools.length > 1 ? "them" : "it"} to the agent, every use still waits for your yes.
               </p>
             </div>

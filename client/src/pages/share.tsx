@@ -24,7 +24,8 @@ export default function SharePage() {
     : null;
   return (
     <div className="space-y-6">
-      <PageHeader title="Share" subtitle="Your card is ready: one click copies it and opens your post." />
+      {/* Une carte expirée ne dit pas « ready » au-dessus de « no longer here » (recette du 16 novembre). */}
+      <PageHeader title="Share" subtitle={card.isError || token === "" ? "This card has expired." : "Your card is ready: one click copies it and opens your post."} />
       {card.isError || token === "" ? (
         <ErrorState message="This card is no longer here: share it again from the notification, or from Home." onRetry={() => navigate("/home")} />
       ) : null}

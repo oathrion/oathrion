@@ -24,10 +24,24 @@ export interface HourPass {
   until: string;
 }
 
-/** L'outil d'un serveur derrière Oathrion, et pas une commande de Claude Code. */
+/*
+ * Seulement une ÉCRITURE (recette du 16 novembre) : un outil destructif est demandé à chaque fois,
+ * comme « Approve, don't ask again » le refuse déjà (`LocalHub.grantAlways`). Le pivot dit la classe
+ * de chaque outil (`judgeHourPassesBy`) ; tant qu'il ne l'a pas dite, ou pour un outil qu'il ne
+ * connaît pas, aucune permission d'une heure.
+ */
+let toolClassOf: ((action: string) => string | null) | null = null;
+
+/** Le pivot donne la classe de ses outils (`server/local-entry.ts`). */
+export function judgeHourPassesBy(classify: ((action: string) => string | null) | null): void {
+  toolClassOf = classify;
+}
+
+/** L'outil d'ÉCRITURE d'un serveur derrière Oathrion, et pas une commande de Claude Code. */
 export function passable(action: unknown): action is string {
   const match = /^mcp\.([a-z0-9][a-z0-9_-]*)\.(.+)$/.exec(String(action ?? ""));
-  return match !== null && match[1] !== "claude-code";
+  if (match === null || match[1] === "claude-code") return false;
+  return toolClassOf === null || toolClassOf(match[0]) === "write";
 }
 
 export class HourPasses {
@@ -53,7 +67,7 @@ export class HourPasses {
   }
 
   grant(agentId: string, action: string): HourPass {
-    if (!passable(action)) throw new Error("Only a tool of a server behind Oathrion can be allowed for an hour.");
+    if (!passable(action)) throw new Error("Only a write tool of a server behind Oathrion can be allowed for an hour; a destructive one is asked every time.");
     const pass: HourPass = { agentId, action, grantedAt: new Date(this.now()).toISOString(), until: new Date(this.now() + HOUR_PASS_MS).toISOString() };
     const kept = this.active().filter((p) => !(p.agentId === agentId && p.action === action));
     writeFileSync(join(this.dir, FILE), JSON.stringify([...kept, pass], null, 2), { mode: 0o600 });

@@ -367,3 +367,56 @@ describe("les heredocs : de la donnée, du code, ou des commandes", () => {
     expect(shell(doc("cat > config.ini", "key = AKIAQWERTYUIOPASDFGH"), { decoys })).toMatchObject({ verdict: "deny", rule: "decoy" });
   });
 });
+
+/*
+ * Trois règles du 16 novembre, écrites d'après de vrais signalements où Oathrion laissait tout
+ * passer : anthropics/claude-code#109735 (rsync --delete vers une variable vide : un disque
+ * effacé), #107655 (un « volume prune » : la base d'un autre projet), #107274 (rm -rf : 12 mois
+ * d'historique git).
+ */
+describe("les suppressions des vrais incidents", () => {
+  it.each([
+    "rsync -av --delete src/ dist/",
+    "rsync -av src/ /srv/backup",
+    "rsync -a --delete ./build/ deploy@web:/srv/site",
+    "rm .git/index.lock",
+    "rm -rf .github-cache",
+    "docker ps",
+    "docker compose down",
+    "docker image ls",
+  ])("passe sans rien dire : %s", (command) => {
+    expect(shell(command)?.verdict).toBeNull();
+  });
+
+  it.each([
+    ["rsync -a --delete ./build/ /", "/"],
+    ["rsync --delete -a src/ ~/Documents", "/home/awa/Documents"],
+    ["cd /tmp && rsync -a --delete-after ./x/ /home/awa", "/home/awa"],
+  ])("refusé, avec ce qui serait effacé : %s", (command, deleting) => {
+    const result = shell(command);
+    expect(result).toMatchObject({ verdict: "deny", rule: "rsync-delete", deleting: [deleting] });
+    expect(result?.reason).toMatch(/^Oathrion refuses rsync --delete outside the project/);
+  });
+
+  it.each([
+    ['DEST=""; rsync -a --delete ./build/ "$DEST/"', "rsync-delete", /If it is empty, rsync deletes from the root/],
+    ["rsync -a --delete out/ `cat target`", "rsync-delete", /a path Oathrion cannot read/],
+    ["docker volume prune -f", "docker-prune", /other projects/],
+    ["docker system prune -a --volumes -f", "docker-prune", /other projects/],
+    ["podman image prune -a", "docker-prune", /for good/],
+    ["docker --context prod volume rm pgdata", "docker-prune", /for good/],
+    ["docker compose down -v", "docker-prune", /other projects/],
+    ["docker-compose down --volumes", "docker-prune", /other projects/],
+    ["rm -rf .git", "rm-git-history", /git history \(\.git\)/],
+    ["rm -rf ./.git/", "rm-git-history", /git history/],
+    ["rm -r /home/awa/projet/.git", "rm-git-history", /git history/],
+  ])("demandé à une personne : %s", (command, rule, reason) => {
+    const result = shell(command);
+    expect(result).toMatchObject({ verdict: "ask", rule });
+    expect(result?.reason).toMatch(reason);
+  });
+
+  it("une règle désactivée par la personne ne juge plus", () => {
+    expect(shell("docker volume prune -f", { disabled: new Set(["docker-prune"]) })?.verdict).toBeNull();
+  });
+});
