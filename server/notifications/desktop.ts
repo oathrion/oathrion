@@ -57,6 +57,8 @@ export function popupEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEn
 
 /* Le temps qu'une fenêtre qui ne peut pas s'afficher met à mourir. */
 const POPUP_GRACE_MS = 1_500;
+/** Après la fin de `notify-send`, le temps laissé à sa sortie pour arriver jusqu'au bout. */
+const OUTPUT_GRACE_MS = 500;
 
 /* GTK pour Python, et l'écran VRAIMENT ouvert, avec l'environnement de la fenêtre : vérifié une fois par pivot. */
 let popupChecked: boolean | null = null;
@@ -479,11 +481,13 @@ export class DesktopChannel implements NotificationChannel {
           if (code === 0) onExit?.(stdout);
           settle(code === 0 ? { ok: true, detail: "done" } : { ok: false, detail: `${command} answered ${String(code)}` });
         };
+        /* Une demi-seconde au plus : un descendant qui garderait la sortie ouverte ne bloque pas tout. */
         const out = child.stdout;
         if (!out || out.readableEnded || out.destroyed) finish();
         else {
           out.once("end", finish);
           out.once("close", finish);
+          setTimeout(finish, OUTPUT_GRACE_MS).unref?.();
         }
       });
     });
