@@ -42,6 +42,7 @@ import { runSetup, SETUP_FLAGS } from "./wrap/setup";
 import { runTools } from "./wrap/tools";
 import { BRIDGE_USAGE } from "./wrap/bridge";
 import { BUNDLE_USAGE } from "./wrap/bundle";
+import { REPORT_USAGE, runReport } from "./wrap/report";
 import { HOOK_USAGE } from "./wrap/claude-hook";
 import { CONSOLE_USAGE } from "./wrap/console";
 import { DECOYS_USAGE } from "./wrap/decoys";
@@ -178,8 +179,9 @@ const SUBCOMMAND_USAGE: Record<string, string> = {
   watch: WATCH_USAGE,
 };
 const asksHelp = (arg: string | undefined) => arg === "--help" || arg === "-h";
+const RECEIPT_SUBCOMMAND_USAGE: Record<string, string> = { bundle: BUNDLE_USAGE, report: REPORT_USAGE };
 const helpFor =
-  argv.length === 2 && asksHelp(argv[1]) ? SUBCOMMAND_USAGE[argv[0]!] : argv.length === 3 && argv[0] === "receipt" && argv[1] === "bundle" && asksHelp(argv[2]) ? BUNDLE_USAGE : undefined;
+  argv.length === 2 && asksHelp(argv[1]) ? SUBCOMMAND_USAGE[argv[0]!] : argv.length === 3 && argv[0] === "receipt" && asksHelp(argv[2]) ? RECEIPT_SUBCOMMAND_USAGE[argv[1]!] : undefined;
 if (helpFor !== undefined) {
   console.log(helpFor.trim());
   process.exit(0);
@@ -264,6 +266,8 @@ if (helpFor !== undefined) {
   if (process.stdin.isTTY) finish("");
 } else if (argv[0] === "receipt" && argv[1] === "bundle") {
   void runBundle(argv.slice(2), { out: (l) => console.log(l), err: (l) => console.error(l), cwd: process.cwd(), env: process.env }).then((code) => process.exit(code));
+} else if (argv[0] === "receipt" && argv[1] === "report") {
+  void runReport(argv.slice(2), { out: (l) => console.log(l), err: (l) => console.error(l), cwd: process.cwd(), env: process.env }).then((code) => process.exit(code));
 } else if (argv[0] === "receipt") {
   process.exit(runReceipt(argv.slice(1), (l) => console.log(l), (l) => console.error(l)));
 } else if (argv[0] === "jail") {

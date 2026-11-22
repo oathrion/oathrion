@@ -64,6 +64,7 @@ describe("signé avec le secret relais", () => {
     expect((await op({ op: "attach", kind: "console" })).status).toBe(403);
     expect((await op({ op: "accord", server: "carnet", verb: "mcp.carnet.delete_note" })).status).toBe(403);
     expect((await op({ op: "bundle", project: "/tmp", scope: { since: "2026-11-01" } })).status).toBe(403);
+    expect((await op({ op: "report", since: "2026-11-01" })).status).toBe(403);
   });
 
   it("jail-open : seulement dehors, et avec une identité", async () => {
@@ -228,5 +229,24 @@ describe("signé avec le secret de session (dehors)", () => {
     const holder = (await op({ op: "attach" }, "outside")).body.holder as string;
     expect((await op({ op: "server", holder, server: { name: "notes-dehors", command: process.execPath, args: [FAKE, "--dehors"] } }, "outside")).status).toBe(200);
     expect(hub.knownServer("notes-dehors", process.execPath, [FAKE, "--dehors"])).toBe(true);
+  });
+
+  it("signe le rapport d'une période : tout ce que le journal du hook a vu, les deux chaînes relues", async () => {
+    const { verifyShared, REPORT_TYPE } = await import("@shared/receipt-share");
+    const record = (toolUseId: string, over: Record<string, unknown>) => ({ phase: "pre", session: "s", toolUseId, tool: "Bash", action: "claude.shell", target: "shell:///tmp/app", ...over });
+    expect((await op({ op: "journal", record: record("toolu_rapport_1", { verdict: "none", command: "npm test" }) }, "outside")).status).toBe(204);
+    expect((await op({ op: "journal", record: record("toolu_rapport_2", { verdict: "deny", rule: "rm-outside-project", command: "rm -rf /tmp/ailleurs" }) }, "outside")).status).toBe(204);
+    const since = new Date(Date.now() - 3_600_000).toISOString();
+    const answer = await op({ op: "report", since, subject: "Équipe test" }, "outside");
+    expect(answer.status).toBe(200);
+    expect(verifyShared(answer.body)).toMatchObject({ ok: true });
+    const statement = answer.body.statement as { type: string; subject: string; summary: { blocked: number }; saves: { what: string; rule: string }[]; evidence: { journal: { intact: boolean } } };
+    expect(statement.type).toBe(REPORT_TYPE);
+    expect(statement.subject).toBe("Équipe test");
+    expect(statement.summary.blocked).toBeGreaterThanOrEqual(1);
+    expect(statement.saves).toContainEqual(expect.objectContaining({ what: "rm -rf /tmp/ailleurs", rule: "rm-outside-project" }));
+    expect(statement.evidence.journal.intact).toBe(true);
+    expect((await op({ op: "report", since: "pas une date" }, "outside")).status).toBe(400);
+    expect((await op({ op: "report", since, until: "2020-01-01" }, "outside")).status).toBe(400);
   });
 });

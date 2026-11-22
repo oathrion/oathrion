@@ -3736,3 +3736,22 @@ arrêtées sur 85, contre 67 pour Oathrion.**
 (six sous-shells et `jq` par commande), mesurés dans le conteneur ; Oathrion 60 à 68 ms selon les
 essais, mesuré directement, dont 41 ms de démarrage de Node.
 
+
+### 5.84 Le rapport signé d'une période : la fondation du score et de l'audit
+
+Le 22 novembre 2026. `oathrion receipt report` signe ce que les agents protégés par Oathrion ont
+fait sur une période (`server/local-report.ts`, type `oathrion.report/v0`) : les comptes par
+issue, par agent et par règle, les actions bloquées, et l'état des deux chaînes relues en entier.
+
+**Tests** : 6 sur la fonction (période, comptes, règles, aucun chemin personnel ni secret,
+`--counts-only`, borne, chaîne brisée, signature), 7 sur la commande et sa vérification, et un
+de bout en bout sur le pivot local (deux lignes envoyées au journal, le rapport signé les
+compte ; un relais enfermé reçoit 403 ; une date fausse, 400). Suite complète : 3 855 tests
+passés, aucun échec.
+
+**Essai réel**, avec la commande compilée, dans un dossier personnel jetable :
+- `oathrion receipt report --for "Equipe essai"` : le pivot démarre, le rapport est écrit dans
+  `oathrion-report-2026-10-23-to-2026-11-22.json` ; code 0 ;
+- `oathrion receipt verify` sur ce fichier : « Verified report », code 0 ;
+- le même fichier avec un total réécrit : « NOT VALID … not shown », code 1 ;
+- `--days 0` : un message clair, code 3.

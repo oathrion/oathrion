@@ -614,6 +614,34 @@ the receipt was altered, when its fingerprint is not among `OATHRION_TRUSTED_FIN
 set), or when the commit it covers is not part of the pull request; commits made after the
 receipt are reported as not covered.
 
+### The report of a period
+
+When a client, an auditor or an insurer asks what your agents did, give them a signed report
+rather than a screenshot:
+
+```bash
+oathrion receipt report                       # the last 30 days
+oathrion receipt report --since 2026-11-01 --until 2026-11-30 --for "Acme"
+oathrion receipt report --days 90 --counts-only
+```
+
+It covers every agent Oathrion protects on this machine, not one repository: how many actions
+went through on their own, asked a person (approved, refused, still waiting) and were blocked;
+the same per agent and per rule; the blocked actions themselves, most recent first; and whether
+both records — Oathrion's receipts and Claude Code's journal — were intact when it was signed,
+re-read in full. `--counts-only` keeps numbers only, with no command. `--for` writes who the
+report is for; it is declared by you, not proven.
+
+It is written to `oathrion-report-<since>-to-<until>.json` in the current folder, and nothing is
+sent: you read it, then give it to whoever asked. They check it with
+`npx oathrion receipt verify <file>`, offline; an altered report is refused and its content is
+not shown. `OATHRION_TRUSTED_FINGERPRINTS` pins the fingerprints they accept, as for receipts.
+The home folder is written `~` and secrets recognisable in commands are redacted before signing.
+
+What it proves, and what it does not: that the report has not changed since this machine's key
+signed it. It is what Oathrion recorded, not proof that nothing happened outside Oathrion, and
+the fingerprint names a key, not a person or a team.
+
 ### The summary, and what Oathrion stopped
 
 The console opens on « Activity », headed by the summary: today (or the last 7 days), how many

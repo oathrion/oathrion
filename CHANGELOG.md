@@ -6,6 +6,14 @@ compatibility, and the entry says so.
 
 ## [Unreleased]
 
+- **A signed report of a period, for whoever asks what your agents did.**
+  `oathrion receipt report` (the last 30 days, or `--days`, `--since`, `--until`) signs what
+  the agents Oathrion protects on this machine did: how many actions went through, asked a
+  person (approved, refused, waiting) and were blocked, per agent and per rule, the blocked
+  actions, and whether both records were intact. It is written to a JSON file and nothing is
+  sent. `oathrion receipt verify` checks it offline, and refuses an altered one without showing
+  its content. `--counts-only` keeps numbers only; `--for` names who it is for.
+
 - **Three more dangerous commands are stopped in Claude Code.** An adoption benchmark replayed
   a typical 98-action agent session against the hook's real rules. Five of its 17 dangerous
   actions went through, and they are now covered:

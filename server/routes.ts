@@ -1942,6 +1942,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           });
           return res.json(signDocument(statement, key.privateKey));
         }
+        case "report": {
+          /*
+           * Le rapport signé d'une période (`server/local-report.ts`) : tous les agents de la
+           * machine, les deux chaînes relues EN ENTIER. Demandé par `oathrion receipt report`.
+           */
+          const text = (value: unknown) => (typeof value === "string" && value.trim() !== "" ? value.trim().slice(0, 300) : null);
+          const since = text(body.since);
+          const until = text(body.until) ?? new Date().toISOString();
+          if (!since || Number.isNaN(Date.parse(since)) || Number.isNaN(Date.parse(until)) || Date.parse(since) > Date.parse(until)) return fail(res, 400, "report: a since date, before the until date.");
+          const { verifyJournal } = await import("../cli/wrap/claude-journal");
+          const { timeline } = await import("./local-activity");
+          const { reportStatement } = await import("./local-report");
+          const { verifyLocalReceipts } = await import("./local-verify");
+          const { signDocument, signingKey } = await import("@shared/receipt-share");
+          const REPORT_EXECUTIONS = 50_000;
+          const { file, lines } = readHookJournal(hub.dir);
+          const executions = await scopeFor(hub.organization).repositories.executions.list(REPORT_EXECUTIONS);
+          const receipts = await verifyLocalReceipts();
+          const journal = verifyJournal(file);
+          const key = signingKey(hub.dir);
+          const statement = reportStatement({
+            entries: timeline(executions, lines, { limit: 1_000_000 }),
+            since: new Date(since).toISOString(),
+            until: new Date(until).toISOString(),
+            subject: text(body.subject)?.slice(0, 120) ?? null,
+            home: homedir(),
+            countsOnly: body.countsOnly === true,
+            /* La plus ancienne exécution relue est encore dans la période : il y en a peut-être d'autres avant. */
+            partial: executions.length >= REPORT_EXECUTIONS && (executions.at(-1)?.timestamp ?? "") >= new Date(since).toISOString(),
+            receipts: { ok: receipts.ok, entries: receipts.entries, head: receipts.headHash },
+            journal: { ok: journal.ok, entries: journal.entries, head: lines.at(-1)?.hash ?? null },
+            issuer: { name: "Oathrion local", publicKey: key.publicKey, fingerprint: key.fingerprint },
+            issuedAt: new Date().toISOString(),
+          });
+          return res.json(signDocument(statement, key.privateKey));
+        }
         case "journal": {
           /* Le hook de Claude Code enfermé : il AJOUTE au journal, par le pivot ; il ne peut pas le réécrire. */
           const { appendJournal } = await import("../cli/wrap/claude-journal");
@@ -1973,7 +2009,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           hub.detach(holder);
           return res.status(204).end();
         default:
-          return fail(res, 400, "op: attach, server, client, accord, claude-ask, claude-status, bundle, status, heartbeat or detach.");
+          return fail(res, 400, "op: attach, server, client, accord, claude-ask, claude-status, bundle, report, status, heartbeat or detach.");
       }
     } catch (error) {
       if (error instanceof ServerConflictError) return fail(res, 409, error.message);

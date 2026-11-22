@@ -13,15 +13,17 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { BUNDLE_TYPE, extractShared, verifyShared, type SharedReceipt, type Signed } from "@shared/receipt-share";
+import { BUNDLE_TYPE, REPORT_TYPE, extractShared, verifyShared, type SharedReceipt, type Signed } from "@shared/receipt-share";
 
 import type { BundleStatement } from "../../server/local-bundle";
+import type { ReportStatement } from "../../server/local-report";
 
 import { bundleLines, bundleMarkdown, bundleVerdict, noReceiptMarkdown, runGit, type Git } from "./bundle";
 import { journalPath, verifyJournal } from "./claude-journal";
 import { HUB_DIRNAME } from "./hub";
 import { localBundle, stateRoot } from "./launch";
 import { nameProblem } from "./name";
+import { reportLines } from "./report";
 
 interface Verdict {
   ok: boolean;
@@ -137,9 +139,10 @@ export function runReceipts(argv: readonly string[], env: NodeJS.ProcessEnv, out
 
 export const RECEIPT_USAGE = `
 oathrion receipt bundle [--base <ref>]          sign what Claude Code did on this branch, for the PR
+oathrion receipt report [--days <n>]            sign what your agents did over a period, to give on request
 oathrion receipt verify <file|folder>... [--github] [--require]
 
-  Checks receipts and branch receipts someone shared with you (the .html file, or the JSON),
+  Checks receipts, branch receipts and reports someone shared with you (the .html file, or the JSON),
   offline and without trusting the page: the signature, and the fingerprint that signed.
   --github   in a GitHub Action: writes the pull request's summary, says which commits the
              receipt does not cover, and accepts only OATHRION_TRUSTED_FINGERPRINTS if set.
@@ -205,6 +208,12 @@ export function runReceipt(argv: readonly string[], out: (l: string) => void, er
       for (const line of bundleLines(bundle, check, verdict)) out(line);
       if (github) reports.push(bundleMarkdown(bundle, check, verdict, pinned, coverage, file));
       if (!verdict.ok) code = Math.max(code, 1);
+      continue;
+    }
+    if (statement?.type === REPORT_TYPE) {
+      const pinned = trusted.length === 0 ? null : check.ok && trusted.includes(check.fingerprint.replace(/\s+/g, "").toLowerCase());
+      for (const line of reportLines(shared as Signed<ReportStatement>, check, pinned)) out(line);
+      if (!check.ok || pinned === false) code = Math.max(code, 1);
       continue;
     }
     if (!check.ok) {

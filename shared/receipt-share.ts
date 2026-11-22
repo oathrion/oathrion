@@ -24,7 +24,9 @@ import { join } from "node:path";
 export const RECEIPT_TYPE = "oathrion.receipt/v0";
 /** Un PAQUET de reçus : tout ce qu'un agent a fait sur une branche (`server/local-bundle.ts`). */
 export const BUNDLE_TYPE = "oathrion.bundle/v0";
-const SIGNED_TYPES: readonly string[] = [RECEIPT_TYPE, BUNDLE_TYPE];
+/** Le RAPPORT d'une période : ce que les agents de la machine ont fait, compté (`server/local-report.ts`). */
+export const REPORT_TYPE = "oathrion.report/v0";
+const SIGNED_TYPES: readonly string[] = [RECEIPT_TYPE, BUNDLE_TYPE, REPORT_TYPE];
 
 /** Ce que toute déclaration signée porte : son type et son émetteur. */
 export interface SignedDocument {
