@@ -4,6 +4,47 @@ All notable changes to Oathrion are recorded here. Versions follow
 [Semantic Versioning](https://semver.org/); during the preview, a minor version may break
 compatibility, and the entry says so.
 
+## [Unreleased]
+
+- **Three more dangerous commands are stopped in Claude Code.** An adoption benchmark replayed
+  a typical 98-action agent session against the hook's real rules. Five of its 17 dangerous
+  actions went through, and they are now covered:
+  - `git reset --hard` and `git clean -f` (without `-n`) are asked: they throw away work that
+    nothing can restore. The question says when `-x` would also delete ignored files such as
+    `.env`.
+  - `DROP`, `TRUNCATE`, a `DELETE` without `WHERE`, and MongoDB's `drop()` or
+    `deleteMany({})`, sent through `psql`, `mysql`, `sqlite3`, `mongosh` and similar tools,
+    are asked.
+  - A delete written as a one-line script (`python -c`, `node -e`, `ruby -e`, `deno`, `bun`,
+    `perl`) is refused when it names a path outside the project, and asked when its path is a
+    variable Oathrion cannot read.
+
+  Measured on the same session: every dangerous action is stopped (17 of 17), the 7 that must
+  be refused are refused without a question, and none of the 81 safe actions asks anything —
+  9.2 questions per 100 actions, against 73.5 for Claude Code's default mode (modelled). Each
+  rule can be turned off like the others (`git-discard`, `sql-destroy`, `script-delete`).
+
+- **What the other free hooks stopped, Oathrion stops too.** A comparative benchmark
+  (`script/bench/`, a frozen corpus of 222 actions) showed eight dangerous commands that at
+  least one other hook for Claude Code stopped and Oathrion let through. They are now covered:
+  - `rm -rf "$BUILD_DIR/"`, a path Oathrion cannot read, is asked: if the variable is empty, it
+    deletes from the root. `${BUILD_DIR:?}` and `$(mktemp -d)` stay free.
+  - A variable set earlier on the same line is read: `D=~; rm -rf "$D"` is refused like
+    `rm -rf ~`.
+  - A script sent through a pipe is read: `printf 'rm -rf ~' | sh`, and
+    `echo ~/other | xargs rm -rf`.
+  - `git branch -D main` (or `master`, `trunk`, `develop`, `production`) is asked.
+  - `gh pr merge`, `gh release create|delete|upload` and `gh repo delete|archive|rename|transfer`
+    are asked.
+  - A secret file sent out of the machine is asked, even outside a session at risk:
+    `curl -d @.env …`, `cat ~/.ssh/id_rsa | curl …`, `scp .env host:`. A key given to `-i`, a
+    file received with `-o`, and templates such as `.env.example` stay free.
+
+  Measured on the same corpus: 67 of 85 dangerous actions stopped (58 before; the three other
+  hooks, modelled from their source code, stop 30 or 31), with no new false positive and no new
+  question in the typical session. The new rules turn off like the others (`rm-unreadable-path`,
+  `gh-publish`, `secret-egress`).
+
 ## [0.1.0-preview.1] — planned for 2026-11-17, with the public announcement
 
 What the first users asked for, in the first trials with a real client (Cursor, in front of the

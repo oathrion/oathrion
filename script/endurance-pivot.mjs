@@ -110,12 +110,33 @@ const samples = [];
 
 const fail = (what) => {
   counts.errors += 1;
-  if (errors.length < 20) errors.push(`${new Date().toISOString()} ${what}`);
+  if (errors.length < 20) {
+    errors.push(`${new Date().toISOString()} ${what}`);
+    console.log(`  erreur : ${what.slice(0, 200)}`);
+  }
 };
 
 await ask("initialize", { protocolVersion: "2025-11-25", capabilities: { elicitation: { form: {} } }, clientInfo: { name: "claude-code", title: "Claude Code", version: "endurance" } });
-const pid = hubPid();
+let pid = hubPid();
 if (!pid) throw new Error("pivot introuvable");
+/*
+ * Le pivot remplacé (16 novembre, nuit : couvercle rabattu, clé révoquée, le relais en démarre un
+ * autre) : c'est le comportement voulu, le banc le note et suit le nouveau, au lieu de planter.
+ */
+let replaced = 0;
+const followHub = () => {
+  try {
+    readFileSync(`/proc/${String(pid)}/status`);
+    return true;
+  } catch {
+    const next = hubPid();
+    if (!next) return false;
+    replaced += 1;
+    console.log(`  pivot remplacé : ${String(pid)} → ${String(next)}`);
+    pid = next;
+    return true;
+  }
+};
 /* Oathrion rencontre ce banc pour la première fois : une personne le confirme dans la console, une fois. */
 {
   const first = ask("tools/call", { name: "read_note", arguments: {} });
@@ -203,10 +224,11 @@ while (Date.now() < end) {
     } catch (error) {
       fail(`accueil : ${String(error)}`);
     }
+    if (!followHub()) fail("pivot introuvable au relevé");
     const sample = {
       minutes: (Date.now() - start) / 60_000,
-      rss: rssMb(pid),
-      fds: fds(pid),
+      rss: pid && followHub() ? rssMb(pid) : 0,
+      fds: pid && followHub() ? fds(pid) : 0,
       calls: counts.reads + counts.inClient + counts.inConsole,
       errors: counts.errors,
       p50: percentile(period, 50),
@@ -237,7 +259,7 @@ const first = { rss: median(head, "rss"), fds: median(head, "fds"), p95: median(
 const last = { ...samples.at(-1), rss: median(tail, "rss"), fds: median(tail, "fds"), p95: median(tail, "p95") };
 const checks = [
   ["aucune erreur", counts.errors === 0, `${String(counts.errors)} erreur(s)`],
-  ["le pivot vit jusqu'au bout", Boolean(hubPid()) || verify.status === 0, `pivot ${String(pid)}`],
+  ["le pivot vit jusqu'au bout", Boolean(hubPid()) || verify.status === 0, `pivot ${String(pid)}${replaced ? `, remplacé ${String(replaced)} fois (veille ou machine figée)` : ""}`],
   ["mémoire stable (médianes, régime établi, +25 % au plus)", last.rss <= first.rss * 1.25, `${first.rss.toFixed(0)} → ${last.rss.toFixed(0)} Mo`],
   ["descripteurs stables (+10 au plus)", last.fds <= first.fds + 10, `${String(first.fds)} → ${String(last.fds)}`],
   ["p95 sans dérive (le double ou +25 ms au plus)", last.p95 <= Math.max(first.p95 * 2, first.p95 + 25), `${first.p95.toFixed(1)} → ${last.p95.toFixed(1)} ms`],

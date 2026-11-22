@@ -32,6 +32,14 @@ const FAKE = join(ROOT, "server", "test", "fixtures", "fake-stdio-mcp-server.cjs
 const argv = process.argv.slice(2);
 const READS = Number(argv[argv.indexOf("--lectures") + 1]) > 0 && argv.includes("--lectures") ? Number(argv[argv.indexOf("--lectures") + 1]) : 50;
 const homes = [];
+/*
+ * Depuis le 9 novembre, Oathrion attend qu'une personne confirme un programme qu'il rencontre pour
+ * la première fois : sans cela, chaque appel du banc attendait 30 s (constaté le 18 novembre). Ce
+ * geste humain, fait une fois, n'est pas ce qu'on mesure : `OATHRION_UNSAFE_TRUST_ALL_PROGRAMS`
+ * l'accorde d'office (et l'inscrit comme tel), dans des dossiers jetables. La veille des agents et
+ * les changements de session restent coupés : `oathrion` les démarrerait sinon pour TOUTE la machine,
+ * même depuis un dossier personnel jetable (quatre veilles de test restées actives, le 18 novembre).
+ */
 
 const now = () => performance.now();
 const ms = (value) => `${value.toFixed(value < 10 ? 1 : 0)} ms`;
@@ -48,7 +56,7 @@ const home = () => {
 /** Un processus qui parle JSON-RPC en stdio, avec qui l'on dialogue. */
 function rpcProcess(command, args, env) {
   /* Pas de notification de bureau pendant la mesure. */
-  const proc = spawn(command, args, { env: { PATH: process.env.PATH ?? "", OATHRION_LOCAL_NOTIFY_DESKTOP: "0", OATHRION_CONSOLE_LIEN: "1", ...env }, stdio: ["pipe", "pipe", "pipe"] });
+  const proc = spawn(command, args, { env: { PATH: process.env.PATH ?? "", OATHRION_LOCAL_NOTIFY_DESKTOP: "0", OATHRION_CONSOLE_LIEN: "1", OATHRION_UNSAFE_TRUST_ALL_PROGRAMS: "1", OATHRION_LOCAL_AGENT_WATCH: "0", OATHRION_NO_SESSION_CHANGES: "1", ...env }, stdio: ["pipe", "pipe", "pipe"] });
   let stderr = "";
   proc.stderr.on("data", (c) => (stderr += c));
   const waiting = new Map();
@@ -85,7 +93,7 @@ function wrap(dir, extra = []) {
 }
 
 async function run(command, args, env) {
-  const proc = spawn(command, args, { env: { PATH: process.env.PATH ?? "", OATHRION_LOCAL_NOTIFY_DESKTOP: "0", OATHRION_CONSOLE_LIEN: "1", ...env }, stdio: ["ignore", "pipe", "pipe"] });
+  const proc = spawn(command, args, { env: { PATH: process.env.PATH ?? "", OATHRION_LOCAL_NOTIFY_DESKTOP: "0", OATHRION_CONSOLE_LIEN: "1", OATHRION_UNSAFE_TRUST_ALL_PROGRAMS: "1", OATHRION_LOCAL_AGENT_WATCH: "0", OATHRION_NO_SESSION_CHANGES: "1", ...env }, stdio: ["ignore", "pipe", "pipe"] });
   let out = "";
   proc.stdout.on("data", (c) => (out += c));
   const code = await new Promise((done) => proc.once("exit", done));
@@ -95,7 +103,7 @@ async function run(command, args, env) {
 /** Une session de console : un ticket d'`oathrion console`, échangé contre un jeton. */
 async function sessionToken(dir) {
   const { out } = await run(process.execPath, [CLI, "console", "--name", "mesure", "--sans-navigateur"], { HOME: dir, OATHRION_WRAP_HOME: dir });
-  const link = /Connexion directe[^:]*: (\S+)/.exec(out)?.[1];
+  const link = /(?:Connexion directe|Direct sign-in)[^:]*: (\S+)/.exec(out)?.[1];
   const port = readFileSync(join(dir, "_local", "port"), "utf8").trim();
   const ticket = new URLSearchParams(link.split("?")[1]).get("ticket");
   const response = await fetch(`http://127.0.0.1:${port}/api/local/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ticket }) });
@@ -113,7 +121,11 @@ async function pendingApproval(base, token, seen = new Set()) {
 }
 
 const results = [];
-const record = (section, label, value, note = "") => results.push({ section, label, value, note });
+const record = (section, label, value, note = "") => {
+  results.push({ section, label, value, note });
+  /* Au fur et à mesure : un banc qui s'arrête dit à quelle étape. */
+  process.stderr.write(`  · ${section} : ${label} — ${value}\n`);
+};
 
 try {
   /* 0. Installation : une commande, une réponse (ici --oui), puis le client démarre le serveur. */
@@ -142,6 +154,18 @@ try {
   const tInit = now() - t0;
   await w.ask("tools/list");
   record("Démarrage", "à froid (base vide) → liste des outils", ms(now() - t0), `initialize à ${ms(tInit)}`);
+  /* Le programme du banc, confirmé une fois dans la console, comme le ferait une personne (le pivot ne reçoit pas les variables du banc). */
+  {
+    const first = w.ask("tools/call", { name: "read_note", arguments: {} });
+    const { base, token } = await sessionToken(dir);
+    let pending;
+    for (let i = 0; i < 200 && !pending; i += 1) {
+      pending = (await (await fetch(`${base}/api/local/programs`, { headers: { authorization: `Bearer ${token}` } })).json()).find((p) => p.status === "pending");
+      if (!pending) await new Promise((done) => setTimeout(done, 25));
+    }
+    if (pending) await fetch(`${base}/api/local/programs/${encodeURIComponent(pending.id)}/trust`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: "{}" });
+    await first;
+  }
   await w.close();
   t0 = now();
   w = wrap(dir);
@@ -214,10 +238,10 @@ try {
   record("Console", "client ouvert → lien de connexion", ms(now() - t0), "");
   await w.close();
   t0 = now();
-  const consoleProc = spawn(process.execPath, [CLI, "console", "--name", "mesure", "--sans-navigateur"], { env: { PATH: process.env.PATH ?? "", HOME: dir, OATHRION_WRAP_HOME: dir, OATHRION_LOCAL_NOTIFY_DESKTOP: "0", OATHRION_CONSOLE_LIEN: "1" }, stdio: ["ignore", "pipe", "pipe"] });
+  const consoleProc = spawn(process.execPath, [CLI, "console", "--name", "mesure", "--sans-navigateur"], { env: { PATH: process.env.PATH ?? "", HOME: dir, OATHRION_WRAP_HOME: dir, OATHRION_LOCAL_NOTIFY_DESKTOP: "0", OATHRION_CONSOLE_LIEN: "1", OATHRION_UNSAFE_TRUST_ALL_PROGRAMS: "1", OATHRION_LOCAL_AGENT_WATCH: "0", OATHRION_NO_SESSION_CHANGES: "1" }, stdio: ["ignore", "pipe", "pipe"] });
   let consoleOut = "";
   consoleProc.stdout.on("data", (c) => (consoleOut += c));
-  while (!/Connexion directe/.test(consoleOut)) await new Promise((done) => setTimeout(done, 20));
+  while (!/Connexion directe|Direct sign-in/.test(consoleOut)) await new Promise((done) => setTimeout(done, 20));
   record("Console", "client fermé → serveur relancé et lien de connexion", ms(now() - t0), "");
   consoleProc.kill("SIGINT");
   await new Promise((done) => consoleProc.once("exit", done));

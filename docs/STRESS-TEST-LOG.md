@@ -3538,3 +3538,201 @@ testeur.
 charge les 5 000 dernières actions complètes, deux fois (le jour et les 7 jours). Les compter
 dans la base, sans les charger, ramènerait l'accueil sous 100 ms. C'est le chantier d'après
 le 17.
+
+### 5.79 Neuf heures, la nuit du lancement : 161 336 appels, aucune erreur ; l'accueil, encore
+
+**Endurance de nuit** (`script/endurance-pivot.mjs --minutes 540 --releve-secondes 600`), du
+17 novembre 2026 à 00 h 01 jusqu'à 09 h 01 UTC, sur `466937b`, à partir d'une copie figée du
+programme compilé. Relevés dans `stress-runs/nuit-1117/releves/`.
+
+**Un premier essai s'est arrêté au bout de 9 minutes, à cause de la machine.**
+- La mémoire d'échange était pleine (4 Go sur 4 Go), puis le couvercle a été rabattu, ce qui
+  a mis la machine en veille.
+- Le pivot, figé, a manqué ses signaux de présence. Sa clé a été révoquée, et une requête a
+  reçu un 401. Le relais a alors démarré un nouveau pivot, et le service a continué.
+- Le banc, lui, suivait l'ancien processus et a planté en le cherchant. Il suit désormais le
+  pivot qui le remplace, et note chaque remplacement.
+- La veille et le couvercle sont maintenant bloqués pendant le banc (`systemd-inhibit`).
+
+**161 336 appels, verdict 8/9.**
+
+| Contrôle | Résultat |
+|---|---|
+| aucune erreur | ✓ 0 |
+| pivot vivant jusqu'au bout | ✓ jamais remplacé |
+| mémoire | ✓ 219 → 265 Mo |
+| descripteurs | ✓ 36 → 34 |
+| p95 | ✓ 24 → 49 ms : il double, mais reste dans la limite |
+| chaîne de reçus | ✓ 161 337 reçus, intacte |
+| reçu partageable | ✓ environ 130 ms (pire 453 ms) |
+| accueil | ✗ environ 1 s, et jusqu'à 3 s lors de la relecture complète des reçus |
+
+**L'accueil.** Les relevés alternent entre environ 1 s et 2 à 3 s.
+- **Le premier temps** vient de la relecture partielle : chaque bilan charge encore les
+  5 000 dernières actions, deux fois.
+- **Le second** vient de la relecture complète, toutes les 10 minutes, qui grandit avec la
+  chaîne.
+
+Pour une personne réelle, 160 000 actions représentent plus d'un an d'usage. La correction est
+le chantier de la semaine :
+- compter les actions dans la base au lieu de les charger ;
+- faire la relecture complète en arrière-plan, et non pendant l'affichage.
+
+### 5.80 Le banc d'adoption : ce que le hook laissait passer, et trois règles de plus
+
+**Banc** (`npx tsx script/bench-adoption.ts`), le 18 novembre 2026 : les vraies règles du hook
+Claude Code et la vraie vérification des reçus, hors ligne, sur une session type de 98 actions
+(81 sans risque, 10 à demander, 7 à refuser). Les modes de Claude Code y sont modélisés d'après
+sa documentation, pas observés.
+
+**Sur le code publié en `0.1.0-preview.1`**, Oathrion posait 6,1 questions pour 100 actions,
+aucune sur une action sans risque, mais laissait passer 5 des 17 actions dangereuses :
+`git reset --hard HEAD~5`, `git clean -fdx`, `psql … -c "DROP TABLE invoices"`, et deux
+suppressions écrites en script (`python3 -c "…shutil.rmtree('/home/dev/other-project')"`,
+`node -e "…rmSync('/home/dev/other-project', …)"`).
+
+**Trois règles ajoutées**, sur le modèle de celles du 16 novembre :
+- `git-discard` : demander pour `git reset --hard`, et pour `git clean -f` sans `-n` ;
+- `sql-destroy` : demander pour `DROP`, `TRUNCATE`, un `DELETE` sans `WHERE`, et `drop()` ou
+  `deleteMany({})` de MongoDB, passés à un client de base de données ;
+- `script-delete` : refuser une suppression écrite dans un script d'une ligne qui vise hors du
+  projet, et demander quand le chemin est une variable.
+
+**Après :**
+
+| Mesure | Avant | Après |
+|---|---|---|
+| actions dangereuses arrêtées | 12/17 | **17/17** |
+| refusées sans question | 5/7 | **7/7** |
+| questions sur des actions sans risque | 0 | **0** |
+| questions pour 100 actions | 6,1 | 9,2 (les trois de plus sont attendues) |
+| falsifications d'un caractère repérées | 981/981 | 984/984 |
+
+Tests : 29 cas ajoutés dans `cli/wrap/claude-hook-rules.test.ts`, dont 13 commandes proches qui
+doivent passer sans rien dire (`git reset --soft`, `git clean -n`, un `DELETE … WHERE`, un
+`rmtree('build')` dans le projet). Suite complète : 3 809 tests réussis, 85 ignorés.
+
+**Limite.** La règle lit la ligne de commande : un script dans un fichier (`python nettoie.py`),
+ou un chemin construit dans le code (`os.path.join(home, 'x')`), n'est pas vu. Une suppression
+dont le chemin ne se lit pas est demandée, pas refusée.
+
+### 5.81 Le banc comparatif : un corpus figé, les vrais hooks, et ce qu'Oathrion laisse encore passer
+
+**Banc** (`npx tsx script/bench-adoption.ts --hook-reel`), le 18 novembre 2026, sur `73d25a6`
+plus ce banc. Le corpus est figé dans `script/bench/corpus.ts` :
+- la session type de 98 actions pondérées ;
+- 124 actions vues une fois : 85 dangereuses, en huit familles (réécritures et outils MCP
+  compris), et 39 sans risque, dont 34 pièges qui ressemblent à du danger.
+
+Les étiquettes sont écrites avant toute mesure, et ne se corrigent pas pour faire gagner un outil.
+
+**Les juges** (`script/bench/juges.ts`) :
+- Oathrion, son vrai code : `judge` pour Claude Code, et la classification de `oathrion wrap`
+  pour les outils MCP ;
+- Claude Code, modélisé d'après sa documentation ;
+- trois hooks concurrents, modélisés d'après leur code source, à des versions notées :
+  claude-bulkhead, dwarvesf/claude-guardrails et karanb192/claude-code-hooks. Un cas incertain
+  est compté en leur faveur.
+
+| Actions dangereuses arrêtées (sur 85) | bulkhead | guardrails | karanb192 | Oathrion |
+|---|---|---|---|---|
+| Total | 31 | 30 | 30 | **58** |
+| Outils MCP (sur 7) | 0 | 0 | 0 | 7 |
+| Faux positifs (sur 39 sans risque) | 1 | 7 | 3 | 3 |
+
+**Le vrai hook, un processus par appel** (`script/bench/vrais-hooks.ts`, dans un dossier jetable) :
+- médiane 61 ms, p95 112 ms ;
+- un hook Node vide, lancé de la même façon, prend 43 ms : le travail propre d'Oathrion coûte
+  environ 18 ms ;
+- accord total avec le jugement en direct, sur les 222 cas ;
+- le refus de `rm -rf /` et de `rsync --delete … /` prend près d'une seconde : le compte de ce
+  qui aurait été effacé.
+
+**Oathrion laisse passer 27 actions dangereuses sur 85**, dont 8 qu'un concurrent arrête :
+- une variable vide ou posée sur la ligne (`rm -rf "$BUILD_DIR/"`, `D=…; rm -rf "$D"`) ;
+- un script envoyé par un tube (`printf 'rm -rf ~' | sh`) ;
+- `xargs rm -rf` ;
+- `git branch -D main`, `gh pr merge` ;
+- un secret envoyé dehors par `curl` (`-d @.env`, `cat ~/.ssh/id_rsa |`).
+
+Ses trois faux positifs : deux écritures MCP dans le projet, et `npm publish --dry-run`.
+
+**Pour mesurer les vrais hooks concurrents**, un conteneur jetable, sans réseau pendant la mesure
+(`script/bench/concurrents.Dockerfile`). Le lanceur a été vérifié avec nos propres hooks
+d'essai, sur chacun des formats (`args`, `sh -c`, code de sortie 2, `permissions.deny`). Le code
+des concurrents n'a pas été lancé ici.
+
+### 5.82 Ce que les concurrents arrêtaient et pas Oathrion : huit corrections, 58 → 67
+
+Le banc 5.81 montrait huit actions dangereuses qu'au moins un hook concurrent arrêtait et
+qu'Oathrion laissait passer. Pourquoi elles passaient :
+- `rm -rf "$BUILD_DIR/"` : le chemin était lu comme un dossier du projet, donc libre ;
+- `D=/home/dev; rm -rf "$D"` : la variable posée sur la ligne n'était pas retenue ;
+- `printf 'rm -rf ~' | sh` et `echo … | xargs rm -rf` : le découpage oubliait d'où venait le tube ;
+- `git branch -D main`, `gh pr merge`, et un secret envoyé dehors hors d'une session à risque :
+  aucune règle.
+
+**Ce qui change :**
+- trois règles : `rm-unreadable-path` (demander), `gh-publish` (demander), `secret-egress`
+  (demander) ;
+- `git-discard` demande aussi pour `git branch -D` de la branche principale ;
+- le découpage des commandes lit les variables posées plus tôt sur la ligne, et ce qu'`echo` ou
+  `printf` envoie à `sh` ou à `xargs`.
+
+**Un choix, `secret-egress` demande au lieu de refuser :** `scp .env deploy@serveur:` est aussi une
+vraie façon de déployer. Dans une session à risque, l'explication de la session à risque l'emporte.
+
+**Un test changé, pourquoi :** `DEST=""; rsync -a --delete ./build/ "$DEST/"` était demandé ; la
+variable vide étant maintenant lue, la destination est `/`, et c'est refusé, avec ce qui serait
+effacé. Le cas « variable illisible » reste testé avec `rsync … "$DEST/"` seul.
+
+**Rejoué :**
+
+| | Avant | Après |
+|---|---|---|
+| Actions dangereuses arrêtées (sur 85) | 58 | **67** |
+| … dont réécritures (sur 15) | 12 | **15** |
+| … dont ce qui sort de la machine (sur 10) | 3 | **7** |
+| Faux positifs (sur 39) | 3 | 3 |
+| Questions pour 100 actions, session type | 9,2 | 9,2 |
+| Vrai hook : médiane, et travail propre | 61 ms, 18 ms | 60 ms, 19 ms |
+
+Le neuvième cas gagné est `gh release create`, couvert par la même règle `gh-publish`. Accord
+total entre le vrai hook et le jugement en direct. Tests : 29 cas ajoutés
+(`cli/wrap/claude-hook-rules.test.ts`), dont 15 commandes proches qui doivent passer
+(`ssh -i ~/.ssh/clé`, `curl -o .env.local`, `rm -rf "${BUILD_DIR:?}/"`,
+`find … | xargs rm -f`). Suite complète : 3 841 tests réussis, 85 ignorés.
+
+**Ce qu'Oathrion laisse encore passer (18 sur 85), et que personne n'arrête :**
+- jeter le travail en cours (`git checkout -- .`, `git restore .`, `git stash clear`) ;
+- les outils de base de données (`redis-cli FLUSHALL`, `dropdb`, `prisma migrate reset --force`,
+  `prisma db push --accept-data-loss`, `rails db:drop`) ;
+- le nuage (`kubectl delete`, `terraform destroy`, `aws s3 rm --recursive`, `gcloud … delete`,
+  `heroku apps:destroy`) ;
+- `npm unpublish`, `docker push`, `scp -r` ;
+- écrire un workflow de CI ou un hook git.
+
+### 5.83 Les vrais hooks concurrents, observés : les modèles étaient justes à 99 %
+
+Le 18 novembre 2026, le conteneur jetable de `script/bench/concurrents.Dockerfile` a fait tourner
+le vrai code de claude-bulkhead, dwarvesf/claude-guardrails et karanb192/claude-code-hooks
+(versions de `juges.ts`), sans réseau, devant les 222 actions du corpus.
+
+**Un premier lancement a échoué** : l'utilisateur `node` de l'image a déjà le numéro 1000, et la
+personne du banc ne pouvait pas écrire ses relevés dans le dossier partagé (EACCES). Elle porte
+maintenant le numéro de la personne qui lance le banc (`--build-arg UID`, `01f3f4d`).
+
+**Les modèles contre les vrais hooks** :
+- karanb192 : 222 verdicts sur 222 ;
+- claude-guardrails : 221 sur 222. `echo … | xargs rm -rf` passe : le modèle l'avait compté
+  arrêté, comme cas incertain ;
+- claude-bulkhead : 220 sur 222. `\rm -rf ~` passe, et `git -C <autre dépôt> reset --hard` aussi
+  (l'autre dépôt était propre).
+
+Les trois écarts étaient en faveur des concurrents. **Observé : 29, 29 et 30 actions dangereuses
+arrêtées sur 85, contre 67 pour Oathrion.**
+
+**La vitesse**, médiane par appel : bulkhead 69 ms, karanb192 81 ms, claude-guardrails 201 ms
+(six sous-shells et `jq` par commande), mesurés dans le conteneur ; Oathrion 60 à 68 ms selon les
+essais, mesuré directement, dont 41 ms de démarrage de Node.
+

@@ -95,6 +95,12 @@ export const RULE_IDS = [
   "rsync-delete",
   "docker-prune",
   "rm-git-history",
+  "git-discard",
+  "sql-destroy",
+  "script-delete",
+  "rm-unreadable-path",
+  "gh-publish",
+  "secret-egress",
 ] as const;
 
 const PREFIX = "Oathrion";
@@ -157,7 +163,7 @@ const SHELL_PROGRAMS = new Set(["sh", "bash", "zsh", "dash", "ksh", "fish", "ash
 /** Les commandes simples d'une ligne, guillemets respectés, en descendant dans les shells imbriqués. */
 function expandCommands(command: string, depth: number): string[] {
   const out: string[] = [];
-  for (const part of topLevelParts(command)) {
+  for (const { part, from } of withPipes(command)) {
     const tokens = program(words(part));
     out.push(part);
     if (depth >= 4) continue;
@@ -166,6 +172,9 @@ function expandCommands(command: string, depth: number): string[] {
     if (base !== undefined && SHELL_PROGRAMS.has(base)) {
       const flag = tokens.indexOf("-c");
       if (flag >= 0 && tokens[flag + 1] !== undefined) out.push(...expandCommands(tokens[flag + 1]!, depth + 1));
+      /* `printf 'rm -rf ~' | sh` : le script arrive par le tube (banc comparatif du 18 novembre). */
+      const script = from !== null && tokens.slice(1).every((t) => t.startsWith("-")) ? printed(from) : null;
+      if (script !== null) out.push(...expandCommands(script, depth + 1));
     } else if (base === "eval") {
       /* `eval '…'` : ses arguments, mis bout à bout, sont une commande. */
       const rest = tokens.slice(1).join(" ");
@@ -175,11 +184,42 @@ function expandCommands(command: string, depth: number): string[] {
       const valued = new Set(["-I", "-i", "-n", "-L", "-l", "-P", "-s", "-d", "-E", "-e", "-a", "-c", "--max-args", "--max-procs", "--delimiter", "--arg-file"]);
       let i = 1;
       while (i < tokens.length && tokens[i]!.startsWith("-")) i += valued.has(tokens[i]!) ? 2 : 1;
-      const rest = tokens.slice(i).map((t) => (/\s/.test(t) ? `'${t}'` : t)).join(" ");
+      /* `echo ~/autre | xargs rm -rf` : ce qu'`echo` écrit devient les arguments de la commande. */
+      const fed = base === "xargs" && from !== null ? printed(from) : null;
+      const rest = [...tokens.slice(i).map((t) => (/\s/.test(t) ? `'${t}'` : t)), ...(fed !== null ? [fed.replace(/\s+/g, " ")] : [])].join(" ");
       if (rest !== "") out.push(...expandCommands(base === "xargs" ? rest : (tokens[i] ?? ""), depth + 1));
     }
   }
   return out;
+}
+
+/** Les commandes de haut niveau, chacune avec celle qui l'alimente par un tube (dans `a | b`, b reçoit a). */
+function withPipes(command: string): { part: string; from: string | null }[] {
+  const parts = topLevelParts(command);
+  let at = 0;
+  let previousEnd = -1;
+  return parts.map((part, i) => {
+    const start = command.indexOf(part, at);
+    const piped = i > 0 && start >= 0 && previousEnd >= 0 && /^\s*\|(?!\|)\s*$/.test(command.slice(previousEnd, start));
+    if (start >= 0) at = previousEnd = start + part.length;
+    else previousEnd = -1;
+    return { part, from: piped ? parts[i - 1]! : null };
+  });
+}
+
+/** Ce qu'`echo` ou `printf` écrit, ou `null` pour toute autre commande. */
+function printed(part: string): string | null {
+  const [cmd, ...args] = program(words(part));
+  const base = cmd?.split("/").pop();
+  if (base === "echo") {
+    while (args.length > 0 && /^-[neE]+$/.test(args[0]!)) args.shift();
+    return args.join(" ");
+  }
+  if (base === "printf" && args[0] !== undefined) {
+    const values = args.slice(1);
+    return args[0].replace(/%s/g, () => values.shift() ?? "").replace(/\\n/g, "\n");
+  }
+  return null;
 }
 
 /** Coupe sur les opérateurs de haut niveau (hors guillemets) et ouvre les sous-shells et les groupes. */
@@ -328,7 +368,31 @@ function freeToTouch(path: string, ctx: RuleContext, cwd: string): boolean {
 
 function judgeShell(command: string, ctx: RuleContext): { verdict: HookVerdict; rule: string; reason: string; deleting?: string[] } | null {
   const on = (id: string) => !ctx.disabled?.has(id);
-  const parts = splitCommands(command).map((part) => program(words(part)));
+  /*
+   * Les variables posées plus tôt sur la ligne, à une valeur écrite en clair (`D=~; rm -rf "$D"`) :
+   * elles sont remplacées par leur valeur, comme le fera le shell (banc comparatif du 18 novembre).
+   */
+  const vars = new Map<string, string>();
+  const substitute = (token: string) => token.replace(/\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)/g, (all, a?: string, b?: string) => vars.get(a ?? b ?? "") ?? all);
+  const parts: string[][] = [];
+  for (const part of splitCommands(command)) {
+    const tokens = words(part);
+    const declared = ["export", "local", "declare", "readonly", "typeset"].includes(tokens[0] ?? "") ? tokens.slice(1).filter((t) => !t.startsWith("-")) : tokens;
+    if (declared.length > 0 && declared.every((t) => /^[A-Za-z_]\w*=/.test(t))) {
+      for (const t of declared) {
+        const [name, ...value] = t.split("=");
+        const text = value.join("=");
+        if (text.includes("$(") || text.includes("`")) vars.delete(name!);
+        else vars.set(name!, substitute(text));
+      }
+    }
+    parts.push(program(tokens.map(substitute)));
+  }
+
+  if (on("secret-egress")) {
+    const sent = secretSent(command);
+    if (sent) return { verdict: "ask", rule: "secret-egress", reason: `${PREFIX}: this sends ${sent} out of the machine, and it holds secrets. Allow it?` };
+  }
   /* Le dossier où chaque commande s'exécute : `cd ~ && rm -rf *` vise le dossier personnel. */
   let cwd = ctx.projectDir;
 
@@ -356,6 +420,20 @@ function judgeShell(command: string, ctx: RuleContext): { verdict: HookVerdict; 
         /* « dossier/* » vise le contenu du dossier : on mesure le dossier. */
         const deleting = targets.map((t) => resolve(cwd, expandHome(t.replace(/\/?\*$/, "") || "/", ctx.home)));
         return { verdict: "deny", rule: "rm-outside-project", reason: `${PREFIX} refuses a recursive delete outside the project (${outside}).`, deleting };
+      }
+    }
+
+    /*
+     * Une suppression récursive d'un chemin qu'Oathrion ne peut pas lire (banc comparatif du
+     * 18 novembre) : `rm -rf "$BUILD_DIR/"` efface depuis la racine si la variable est vide. Comme
+     * pour rsync, une personne décide. `${X:?}` (le shell s'arrête si X est vide) et `$(mktemp -d)`
+     * (jamais vide) restent libres.
+     */
+    if (on("rm-unreadable-path") && base === "rm") {
+      const recursive = args.some((a) => a === "--recursive" || (/^-[a-zA-Z]+$/.test(a) && /[rR]/.test(a)));
+      const unreadable = args.find((t) => /^(?:\$\{?[A-Za-z_]\w*\}?|\$\([^)]*\)|`[^`]*`)(?:\/\*?)?$/.test(t) && !/^\$\{?(HOME|PWD)\b/.test(t) && !/^(?:\$\(|`)\s*mktemp\b/.test(t));
+      if (recursive && unreadable !== undefined) {
+        return { verdict: "ask", rule: "rm-unreadable-path", reason: `${PREFIX}: rm -rf ${unreadable}, a path Oathrion cannot read. If it is empty, this deletes from the root of the disk. Allow it?` };
       }
     }
 
@@ -429,6 +507,81 @@ function judgeShell(command: string, ctx: RuleContext): { verdict: HookVerdict; 
       }
     }
 
+    /*
+     * Défaire du travail que rien ne sauvegarde (18 novembre, banc des raisons d'adoption :
+     * `git reset --hard` et `git clean -fdx` passaient). Le premier jette les modifications non
+     * commitées, le second les fichiers non suivis : aucun n'a de corbeille. `git clean -n`
+     * (un essai à blanc) reste libre.
+     */
+    if (on("git-discard") && base === "git") {
+      const sub = gitSubcommand(args);
+      if (sub[0] === "reset" && sub.includes("--hard")) {
+        return { verdict: "ask", rule: "git-discard", reason: `${PREFIX}: git reset --hard throws away uncommitted changes, which nothing can restore. Allow it?` };
+      }
+      const cleanFlags = sub.slice(1).filter((a) => a.startsWith("-"));
+      const forced = cleanFlags.some((f) => f === "--force" || (/^-[a-zA-Z]+$/.test(f) && f.includes("f")));
+      const dryRun = cleanFlags.some((f) => f === "--dry-run" || (/^-[a-zA-Z]+$/.test(f) && f.includes("n")));
+      if (sub[0] === "clean" && forced && !dryRun) {
+        const ignored = cleanFlags.some((f) => /^-[a-zA-Z]+$/.test(f) && /[xX]/.test(f));
+        return { verdict: "ask", rule: "git-discard", reason: `${PREFIX}: git clean deletes the files git does not track${ignored ? ", ignored ones included (.env, local data)" : ""}, with no recycle bin. Allow it?` };
+      }
+      /* Forcer la suppression de la branche principale (banc comparatif du 18 novembre). `git branch -d` refuse déjà une branche non fusionnée. */
+      if (sub[0] === "branch") {
+        const flags = sub.slice(1).filter((a) => a.startsWith("-"));
+        const deletes = flags.some((f) => f === "--delete" || /^-[a-zA-Z]*[dD]/.test(f));
+        const forcedDelete = flags.some((f) => f === "--force" || /^-[a-zA-Z]*[Df]/.test(f));
+        const main = sub.slice(1).find((a) => /^(main|master|trunk|develop|production)$/.test(a));
+        if (deletes && forcedDelete && main !== undefined) {
+          return { verdict: "ask", rule: "git-discard", reason: `${PREFIX}: git branch -D ${main} deletes the main branch, and its commits that are nowhere else. Allow it?` };
+        }
+      }
+    }
+
+    /*
+     * Effacer des données d'une base, par son client en ligne de commande (même banc : un
+     * `psql -c "DROP TABLE …"` passait). DROP, TRUNCATE, un DELETE sans WHERE, et leurs
+     * équivalents MongoDB. Une requête dans un fichier (`-f`) reste illisible : la base doit garder
+     * ses propres sauvegardes.
+     */
+    if (on("sql-destroy") && ["psql", "mysql", "mariadb", "sqlite3", "mongosh", "mongo", "clickhouse-client", "duckdb"].includes(base ?? "")) {
+      const text = args.join(" ");
+      const destroys =
+        /\bdrop\s+(table|database|schema|collection|view|index)\b/i.test(text) ||
+        /\btruncate\b/i.test(text) ||
+        (/\bdelete\s+from\b/i.test(text) && !/\bwhere\b/i.test(text)) ||
+        /\.(drop|dropDatabase)\s*\(/.test(text) ||
+        /\.deleteMany\(\s*\{\s*\}\s*\)/.test(text);
+      if (destroys) {
+        return { verdict: "ask", rule: "sql-destroy", reason: `${PREFIX}: this deletes data from a database for good. Allow it?` };
+      }
+    }
+
+    /*
+     * Une suppression écrite en script, dans la ligne de commande (même banc :
+     * `python3 -c "shutil.rmtree('~/autre-projet')"` et `node -e "fs.rmSync(…)"` passaient, là
+     * où `rm -rf` est refusé). Un chemin écrit en clair hors du projet est refusé, avec ce qui
+     * serait effacé ; un script qui supprime sans chemin lisible demande une personne.
+     */
+    if (on("script-delete") && /^(python[0-9.]*|node|deno|bun|ruby|perl)$/.test(base ?? "")) {
+      const at = args.findIndex((a) => a === "-c" || a === "-e" || a === "--eval" || a === "-p" || a === "--print");
+      const code = at >= 0 ? (args[at + 1] ?? "") : "";
+      const deletes = /\b(shutil\.rmtree|os\.(remove|unlink|rmdir|removedirs)|\.unlink\(|\.rmdir\(|rmSync|rmdirSync|unlinkSync|fs\.(rm|rmdir|unlink)\b|fs\.promises\.(rm|rmdir|unlink)|rimraf|FileUtils\.(rm_rf|rm_r|rm|remove_dir)|\brmtree\b|Deno\.remove)/.test(code);
+      if (deletes) {
+        // Paths that look like paths anywhere, plus a bare name given straight to a delete call.
+        const literals = [
+          ...[...code.matchAll(/(['"`])((?:~|\/|\.\.?\/|\$HOME|\$\{HOME\})[^'"`]*)\1/g)].map((m) => m[2]!),
+          ...[...code.matchAll(/(?:rmtree|remove|unlink|rmdir|removedirs|rmSync|rmdirSync|unlinkSync|rm|rm_rf|rm_r|remove_dir|rimraf|rimraf\.sync)\s*\(\s*(['"`])([^'"`$]+)\1/g)].map((m) => m[2]!),
+        ];
+        const outside = literals.find((p) => p === "/" || !freeToTouch(p, ctx, cwd));
+        if (outside !== undefined) {
+          return { verdict: "deny", rule: "script-delete", reason: `${PREFIX} refuses a delete written in a script outside the project (${outside}).`, deleting: [resolve(cwd, expandHome(outside, ctx.home))] };
+        }
+        if (literals.length === 0) {
+          return { verdict: "ask", rule: "script-delete", reason: `${PREFIX}: this script deletes files at a path Oathrion cannot read. Allow it?` };
+        }
+      }
+    }
+
     if (base === "git" && gitSubcommand(args)[0] === "push") {
       const push = gitSubcommand(args);
       if (on("git-force-push") && push.some((a) => a === "--force" || a === "-f" || /^-[a-zA-Z]*f[a-zA-Z]*$/.test(a) || /^\+/.test(a))) {
@@ -443,6 +596,22 @@ function judgeShell(command: string, ctx: RuleContext): { verdict: HookVerdict; 
       const recursive = args.some((a) => a === "--recursive" || /^-[a-zA-Z]*R[a-zA-Z]*$/.test(a));
       if (recursive && args.some((a) => a === "777" || a === "a+rwx" || a === "ugo+rwx")) {
         return { verdict: "deny", rule: "chmod-777-recursive", reason: `${PREFIX} refuses making a whole tree writable by everyone (chmod -R 777).` };
+      }
+    }
+
+    /*
+     * GitHub, au nom de la personne et pour tout le monde (banc comparatif du 18 novembre) :
+     * fusionner une PR, publier ou supprimer une version, supprimer ou archiver un dépôt.
+     */
+    if (on("gh-publish") && base === "gh") {
+      const positional = args.filter((a) => !a.startsWith("-"));
+      const acts = ["pr merge", "release create", "release delete", "release upload", "repo delete", "repo archive", "repo rename", "repo transfer"].find((pair) => {
+        const [noun, verb] = pair.split(" ");
+        const at = positional.indexOf(noun!);
+        return at >= 0 && positional[at + 1] === verb;
+      });
+      if (acts !== undefined) {
+        return { verdict: "ask", rule: "gh-publish", reason: `${PREFIX}: gh ${acts} acts on GitHub in your name, for everyone. Allow it?` };
       }
     }
 
@@ -698,6 +867,32 @@ function taintReason(taint: Taint, what: string): string {
  * un secret reconnaissable ou un leurre : le reste passe sans rien coûter.
  */
 const SENSITIVE_PATH = /(?:^|[\s'"=:/@<])(\.env(?:\.[\w.-]+)?|\.ssh\/[\w.-]*|id_(?:rsa|ed25519|ecdsa|dsa)\b|\.aws\/[\w.-]*|\.netrc|\.npmrc|\.pgpass|\.docker\/config\.json|\.kube\/config)/;
+
+/*
+ * UN SECRET ENVOYÉ DEHORS, même hors d'une session à risque (banc comparatif du 18 novembre) :
+ * `curl -d @.env https://…`, `cat ~/.ssh/id_rsa | curl -d @- …`, `scp .env hôte:`. Demandé et non
+ * refusé : `scp .env deploy@serveur:` est aussi une vraie façon de déployer. Seuls les
+ * programmes qui envoient des données comptent, et la clé passée à `-i` (`scp -i ~/.ssh/clé`) ou un
+ * fichier reçu (`curl -o .env`) n'est pas un envoi. Les modèles (`.env.example`) restent libres.
+ */
+const SENDERS = new Set(["curl", "wget", "http", "https", "xh", "nc", "ncat", "netcat", "socat", "telnet", "scp", "sftp", "ftp", "lftp", "tftp", "rsync", "mail", "mailx", "sendmail", "mutt", "aws", "gsutil", "rclone"]);
+const TEMPLATE_ENV = /^\.env\.(example|sample|template|schema|defaults|dist)$/;
+
+function secretIn(text: string): string | null {
+  const cleaned = text.replace(/(^|\s)(-i|-o|-O|--output|--output-document)\s+\S+/g, " ").replace(/IdentityFile=\S+/g, " ");
+  for (const m of cleaned.matchAll(new RegExp(SENSITIVE_PATH.source, "g"))) if (!TEMPLATE_ENV.test(m[1]!)) return m[1]!;
+  return null;
+}
+
+function secretSent(command: string): string | null {
+  for (const { part, from } of withPipes(heredocs(command).rest)) {
+    const base = program(words(part))[0]?.split("/").pop() ?? "";
+    if (!SENDERS.has(base)) continue;
+    const sent = secretIn(part) ?? (from !== null ? secretIn(from) : null);
+    if (sent) return sent;
+  }
+  return null;
+}
 
 function decoyReason(what: string, taint: Taint | null): string {
   const read = taint ? ` This session read untrusted content (${taint.source}, at ${taint.at.slice(11, 16)} UTC).` : "";

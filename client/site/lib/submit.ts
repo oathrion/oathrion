@@ -241,7 +241,7 @@ export function routedTransport(
  * Le prix est réel — le visiteur sort du site. Il est assumé : une inscription perdue
  * coûte plus cher qu'une page de confirmation qui n'est pas la nôtre.
  */
-export function redirectTransport(endpoint: string, fieldMap: Record<string, string>): FormTransport {
+export function redirectTransport(endpoint: string, fieldMap: Record<string, string>, fixed: Record<string, string> = {}): FormTransport {
   return {
     name: "redirect",
     async send(submission) {
@@ -259,12 +259,16 @@ export function redirectTransport(endpoint: string, fieldMap: Record<string, str
       form.style.position = "fixed";
       form.style.left = "-9999px";
 
-      for (const [ours, theirs] of Object.entries(fieldMap)) {
-        const value = (record[ours] ?? "").trim();
+      /* `fixed` : des champs constants, comme l'étiquette qui dit d'où vient l'inscription. */
+      const fields: [string, string][] = [
+        ...Object.entries(fieldMap).map(([ours, theirs]): [string, string] => [theirs, (record[ours] ?? "").trim()]),
+        ...Object.entries(fixed),
+      ];
+      for (const [name, value] of fields) {
         if (!value) continue;
         const input = document.createElement("input");
         input.type = "hidden";
-        input.name = theirs;
+        input.name = name;
         input.value = value;
         form.appendChild(input);
       }

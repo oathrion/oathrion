@@ -69,11 +69,32 @@ const WAITLIST_ENDPOINT = import.meta.env.VITE_PLACET_FORM_WAITLIST as string | 
  * formulaire parce qu'ils renseignent la personne sur ce qu'on cherche a savoir, meme
  * quand le collecteur ne sait pas encore les stocker.
  */
+/*
+ * Les candidatures au pilote (17 novembre, essais sur un téléphone) : le `mailto` ouvrait une
+ * messagerie jamais configurée, puis Buttondown imposait la double confirmation, qui n'a pas de
+ * sens pour quelqu'un qui écrit pour qu'on se parle, et refusait une adresse déjà sur la liste
+ * d'attente. Elles partent donc à un service de formulaire qui les remet dans la boîte de
+ * contact (FormSubmit, `VITE_PLACET_FORM_PILOT=https://formsubmit.co/<adresse>`), puis le
+ * candidat revient sur `/pilot?sent=1`. Une autre adresse reste une URL JSON (`httpTransport`).
+ */
+const PILOT_FIELDS = Object.fromEntries(
+  ["name", "email", "company", "role", "country", "building", "workflow", "agents", "problem", "wants"].map((field) => [field, field]),
+);
+const pilotTransport = (endpoint: string) =>
+  endpoint.startsWith("https://formsubmit.co/")
+    ? redirectTransport(endpoint, PILOT_FIELDS, {
+        _subject: "Founding Pilot application",
+        _template: "table",
+        /* Le piège du formulaire (`website`) arrête déjà les robots ; un CAPTCHA en plus perdrait des candidats. */
+        _captcha: "false",
+        _next: `${window.location.origin}/pilot?sent=1`,
+      })
+    : endpoint;
 if (PILOT_ENDPOINT || WAITLIST_ENDPOINT) {
   configureTransport(
     routedTransport({
-      pilot: PILOT_ENDPOINT,
-      waitlist: WAITLIST_ENDPOINT ? redirectTransport(WAITLIST_ENDPOINT, { email: "email" }) : undefined,
+      pilot: PILOT_ENDPOINT ? pilotTransport(PILOT_ENDPOINT) : undefined,
+      waitlist: WAITLIST_ENDPOINT ? redirectTransport(WAITLIST_ENDPOINT, { email: "email", name: "metadata__name", country: "metadata__country", role: "metadata__role", useCase: "metadata__use_case" }, { tag: "waitlist", embed: "1" }) : undefined,
     }),
   );
 }

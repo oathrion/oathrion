@@ -31,7 +31,10 @@ const AGENT_COUNTS = ["Not in production yet", "1–5", "6–20", "21–100", "M
 export default function PilotPage(): JSX.Element {
   const [values, setValues] = useState(EMPTY);
   const [errors, setErrors] = useState<Errors>({});
-  const [state, setState] = useState<"idle" | "sending" | "sent" | "failed">("idle");
+  /* `?sent=1` : le retour du service de formulaire, la candidature est partie (`main.tsx`). */
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "failed">(() =>
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("sent") === "1" ? "sent" : "idle",
+  );
   const [failure, setFailure] = useState("");
   const [touched, setTouched] = useState(false);
 
