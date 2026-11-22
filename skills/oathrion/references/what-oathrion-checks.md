@@ -39,6 +39,11 @@ Oathrion's notification, the console, or the phone.
 - `docker … prune`, `docker volume rm`, `docker compose down -v`;
 - a recursive delete or an `rsync --delete` whose path is a variable Oathrion cannot read;
 - `gh pr merge`, publishing or deleting a GitHub release, deleting or archiving a repository;
+- destroying production: a hosting or cloud CLI that deletes (`railway volume delete`,
+  `fly apps destroy`, `heroku pg:reset`, `aws … delete-*`, `gcloud … delete`…), `terraform destroy`,
+  `terraform apply -auto-approve`, `kubectl delete`, `helm uninstall`, a database reset
+  (`prisma migrate reset`, `rails db:drop`, `redis-cli FLUSHALL`…), or a `DELETE` or deleting
+  GraphQL mutation sent with `curl` to a hosting provider's API;
 - sending a secret file (`.env`, an SSH key, cloud credentials) out of the machine;
 - replacing a file that git does not track;
 - after the session read untrusted content (a web page, an issue, a message): anything that
@@ -56,7 +61,8 @@ Only the person does this, in their own file `~/.oathrion/claude-code-rules.json
 
 The rule names: `rm-outside-project`, `rm-git-history`, `rm-unreadable-path`, `script-delete`,
 `rsync-delete`, `docker-prune`, `git-discard`, `git-force-push`, `git-push`, `gh-publish`,
-`package-publish`, `sql-destroy`, `secret-egress`, `pipe-to-shell`, `chmod-777-recursive`,
+`package-publish`, `sql-destroy`, `db-reset`, `cloud-destroy`, `infra-destroy`, `api-destroy`,
+`secret-egress`, `pipe-to-shell`, `chmod-777-recursive`,
 `write-outside-project`, `protect-guard-files`, `overwrite-untracked`, `tainted-session`,
 `decoy`, `server-token`.
 

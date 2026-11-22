@@ -6,6 +6,34 @@ compatibility, and the entry says so.
 
 ## [Unreleased]
 
+- **Destroying production now needs a person, in Claude Code.** In April 2026, an AI agent
+  deleted a company's production database in 9 seconds, with a single call to its hosting
+  provider's API and a token that could do everything (PocketOS, on Railway). Oathrion let that
+  kind of call through. Four new rules ask a person first, and the question says what would be
+  destroyed:
+  - `cloud-destroy`: the hosting and cloud CLIs, such as `railway delete|down|volume delete|environment delete`,
+    `fly apps destroy`, `fly volumes destroy`, `heroku apps:destroy`, `heroku pg:reset`,
+    `vercel remove`, `netlify sites:delete`, `render … delete --confirm`, `supabase projects delete`,
+    `gcloud … delete`, `aws … delete-*|terminate-*`, `aws s3 rm|rb`, `az … delete`,
+    `doctl … delete`, Neon, PlanetScale, Turso and `wrangler … delete`.
+  - `infra-destroy`: `terraform destroy`, `terraform apply -destroy`, `terraform apply -auto-approve`
+    (OpenTofu and Terragrunt too), `pulumi destroy`, `kubectl delete` (a pod or a job stays
+    free: its controller recreates it), `helm uninstall`, and `kubectl scale --replicas=0` in a
+    namespace or context named for production.
+  - `db-reset`: `prisma migrate reset`, `prisma db push --force-reset|--accept-data-loss`,
+    `rails db:drop|db:reset`, Django `flush`, Laravel `migrate:fresh|db:wipe`, `supabase db reset`
+    (the question says whether it is the linked remote database), `dropdb`,
+    `redis-cli FLUSHALL|FLUSHDB`, and the Ecto, Sequelize and TypeORM equivalents.
+  - `api-destroy`: `curl`, `wget`, HTTPie or `xh` sending a `DELETE`, or a GraphQL mutation that
+    deletes (`volumeDelete`), to a known hosting API (Railway, Fly.io, Heroku, Vercel, Render,
+    DigitalOcean, Netlify, Supabase, Neon, PlanetScale, Cloudflare, AWS, Google Cloud, Azure…).
+
+  Reads stay free: `terraform plan`, `kubectl get`, `railway logs`, a `curl` without a method.
+  Measured on the comparative benchmark, with 24 new dangerous actions and 14 new look-alikes:
+  101 of 109 dangerous actions stopped (67 before), no new false positive, and the typical
+  session asks exactly as often as before (9.2 questions per 100 actions). Each rule can be
+  turned off like the others.
+
 - **A signed report of a period, for whoever asks what your agents did.**
   `oathrion receipt report` (the last 30 days, or `--days`, `--since`, `--until`) signs what
   the agents Oathrion protects on this machine did: how many actions went through, asked a

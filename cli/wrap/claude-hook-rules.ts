@@ -101,6 +101,10 @@ export const RULE_IDS = [
   "rm-unreadable-path",
   "gh-publish",
   "secret-egress",
+  "cloud-destroy",
+  "infra-destroy",
+  "db-reset",
+  "api-destroy",
 ] as const;
 
 const PREFIX = "Oathrion";
@@ -556,6 +560,9 @@ function judgeShell(command: string, ctx: RuleContext): { verdict: HookVerdict; 
       }
     }
 
+    const production = destroysProduction(base ?? "", args);
+    if (production && on(production.rule)) return { verdict: "ask", rule: production.rule, reason: production.reason };
+
     /*
      * Une suppression écrite en script, dans la ligne de commande (même banc :
      * `python3 -c "shutil.rmtree('~/autre-projet')"` et `node -e "fs.rmSync(…)"` passaient, là
@@ -640,6 +647,297 @@ function judgeShell(command: string, ctx: RuleContext): { verdict: HookVerdict; 
   }
   for (const extra of ctx.extraAsk ?? []) {
     if (extra.pattern.test(command)) return { verdict: "ask", rule: extra.id, reason: `${PREFIX}: ${extra.reason}` };
+  }
+  return null;
+}
+
+/*
+ * DÉTRUIRE LA PRODUCTION (22 novembre, d'après l'incident PocketOS d'avril 2026,
+ * `notes/SYNTHESE-5-INCIDENTS.md`, incident 5) : un agent a effacé le volume de la base de
+ * production d'UN appel à l'API de Railway, avec un jeton qui avait tous les droits, en neuf
+ * secondes. Ni `rm` ni git : la CLI d'un hébergeur (`cloud-destroy`), un outil d'infrastructure
+ * (`infra-destroy`), la remise à zéro d'une base par son outil (`db-reset`), ou un appel d'API
+ * direct (`api-destroy`). Chacun demande une personne, et la question dit ce qui serait détruit.
+ * Les lectures (`terraform plan`, `kubectl get`, `railway logs`, un `curl` sans méthode) restent
+ * libres. Les sous-commandes sont celles des documentations, vérifiées le 22 novembre.
+ */
+type Destroys = { rule: "cloud-destroy" | "infra-destroy" | "db-reset" | "api-destroy"; reason: string };
+
+/* Les options qui prennent une valeur, communes aux CLI des hébergeurs : leur valeur n'est pas une sous-commande. */
+const CLOUD_VALUED = new Set([
+  "-p", "--project", "-s", "--service", "-e", "--environment", "-v", "--volume", "--2fa-code", "-a", "--app", "-r", "--remote", "--confirm",
+  "--scope", "--team", "--token", "-t", "--region", "--profile", "--output", "-o", "--endpoint-url", "--query", "--context", "--kube-context",
+  "-n", "--namespace", "-g", "--resource-group", "--name", "--subscription", "--org", "--access-token", "-h", "--host", "--port", "-U", "--username", "--db-url",
+]);
+const DELETE_VERBS = new Set(["delete", "rm", "remove"]);
+
+/** Les mots qui ne sont pas des options, sans les valeurs des options qui en prennent une. */
+function positionals(args: readonly string[], valued: ReadonlySet<string> = CLOUD_VALUED): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i]!;
+    if (arg.startsWith("-") && arg.length > 1) {
+      if (valued.has(arg)) i += 1;
+      continue;
+    }
+    out.push(arg);
+  }
+  return out;
+}
+
+/** La valeur d'une option : `--name x`, `--name=x`, `-n x`. */
+function optionValue(args: readonly string[], names: readonly string[]): string | undefined {
+  for (let i = 0; i < args.length; i += 1) {
+    for (const name of names) {
+      if (args[i] === name) return args[i + 1];
+      if (args[i]!.startsWith(`${name}=`)) return args[i]!.slice(name.length + 1);
+    }
+  }
+  return undefined;
+}
+
+/** `npx prisma …`, `pnpm exec prisma …`, `bundle exec rails …`, `uv run python manage.py …` : le vrai programme. */
+function viaRunner(base: string, args: readonly string[]): [string, string[]] {
+  let current = base;
+  let rest = [...args];
+  for (let depth = 0; depth < 4; depth += 1) {
+    let i = 0;
+    while (i < rest.length && rest[i]!.startsWith("-")) i += ["-p", "--package"].includes(rest[i]!) ? 2 : 1;
+    const next = rest[i];
+    if (next === undefined) break;
+    const script = next.split("/").pop()!;
+    if (["npx", "bunx", "pnpx"].includes(current)) [current, rest] = [script, rest.slice(i + 1)];
+    else if (["pnpm", "yarn", "bun", "bundle", "uv", "poetry", "pipenv"].includes(current)) {
+      const sub = ["exec", "dlx", "x", "run"].includes(next) ? 1 : 0;
+      const program = rest[i + sub];
+      if (program === undefined) break;
+      [current, rest] = [program.split("/").pop()!, rest.slice(i + sub + 1)];
+    } else if (/^python[0-9.]*$/.test(current) && script === "manage.py") [current, rest] = [script, rest.slice(i + 1)];
+    else if (current === "php" && script === "artisan") [current, rest] = [script, rest.slice(i + 1)];
+    else break;
+  }
+  return [current, rest];
+}
+
+const named = (name: string | undefined) => (name !== undefined && name !== "" ? ` ${name}` : "");
+const destroyed = (what: string, provider: string) => `${PREFIX}: this destroys ${what} on ${provider}, and whatever data it holds, for good. Allow it?`;
+
+/* Les CLI qui suivent toutes la même forme : `<outil> <nom…> delete <ressource>`. */
+const GENERIC_CLOUD: Record<string, { provider: string; verbs: ReadonlySet<string> }> = {
+  gcloud: { provider: "Google Cloud", verbs: new Set(["delete"]) },
+  az: { provider: "Azure", verbs: new Set(["delete", "delete-batch", "purge"]) },
+  doctl: { provider: "DigitalOcean", verbs: new Set(["delete", "rm"]) },
+  neonctl: { provider: "Neon", verbs: new Set(["delete"]) },
+  neon: { provider: "Neon", verbs: new Set(["delete"]) },
+  pscale: { provider: "PlanetScale", verbs: new Set(["delete"]) },
+  turso: { provider: "Turso", verbs: new Set(["destroy"]) },
+  wrangler: { provider: "Cloudflare", verbs: new Set(["delete"]) },
+};
+
+/* Les API des hébergeurs, où une méthode DELETE ou une mutation de suppression détruit pour de bon. */
+const HOSTING_APIS: readonly [RegExp, string][] = [
+  [/^backboard\.railway\.(app|com)$/, "Railway"],
+  [/^api\.fly\.io$|^api\.machines\.dev$/, "Fly.io"],
+  [/^api\.heroku\.com$/, "Heroku"],
+  [/^api\.vercel\.com$/, "Vercel"],
+  [/^api\.render\.com$/, "Render"],
+  [/^api\.digitalocean\.com$/, "DigitalOcean"],
+  [/^api\.netlify\.com$/, "Netlify"],
+  [/^api\.supabase\.(com|io)$/, "Supabase"],
+  [/^console\.neon\.tech$/, "Neon"],
+  [/^api\.planetscale\.com$/, "PlanetScale"],
+  [/^api\.cloudflare\.com$/, "Cloudflare"],
+  [/^api\.turso\.tech$/, "Turso"],
+  [/^api\.linode\.com$/, "Linode"],
+  [/^api\.hetzner\.cloud$/, "Hetzner"],
+  [/^management\.azure\.com$/, "Azure"],
+  [/(^|\.)googleapis\.com$/, "Google Cloud"],
+  [/(^|\.)amazonaws\.com$/, "AWS"],
+];
+
+/** Une mutation GraphQL qui supprime (`volumeDelete`, `serviceDelete`, `projectDelete` chez Railway), ou `null`. */
+function deletingMutation(text: string): string | null {
+  if (!/\bmutation\b/.test(text)) return null;
+  return /\b([a-z][A-Za-z]*(?:Delete|Destroy|Remove|Purge|Wipe|Reset))\b/.exec(text)?.[1] ?? null;
+}
+
+function destroysProduction(base0: string, args0: readonly string[]): Destroys | null {
+  const [base, args] = viaRunner(base0, args0);
+  const pos = positionals(args);
+  const cloud = (what: string, provider: string): Destroys => ({ rule: "cloud-destroy", reason: destroyed(what, provider) });
+
+  /* ─── Les hébergeurs ─── */
+  if (base === "railway") {
+    const [first, second, third] = pos;
+    if (DELETE_VERBS.has(first ?? "")) return { rule: "cloud-destroy", reason: `${PREFIX}: this deletes the Railway project${named(optionValue(args, ["-p", "--project"]))}, with all its services, deployments and data, for good. Allow it?` };
+    if (first === "down") return { rule: "cloud-destroy", reason: `${PREFIX}: railway down removes the latest deployment of${named(optionValue(args, ["-s", "--service"])) || " the linked service"}: it stops serving until someone deploys again. Allow it?` };
+    if ((first === "volume" || first === "volumes") && DELETE_VERBS.has(second ?? "")) return cloud(`the volume${named(optionValue(args, ["-v", "--volume"]))}`, "Railway");
+    if ((first === "volume" || first === "volumes") && second === "files" && DELETE_VERBS.has(third ?? "")) return cloud(`files on a volume (${pos[3] ?? "?"})`, "Railway");
+    if ((first === "environment" || first === "env") && DELETE_VERBS.has(second ?? "")) return cloud(`the environment${named(third)} and its services`, "Railway");
+    if ((first === "service" || first === "bucket") && DELETE_VERBS.has(second ?? "")) return cloud(`the ${first}${named(third ?? optionValue(args, ["-s", "--service"]))}`, "Railway");
+    const mutation = first === "api" ? deletingMutation(args.join(" ")) : null;
+    if (mutation) return { rule: "api-destroy", reason: `${PREFIX}: this sends the GraphQL mutation ${mutation} to Railway: it destroys a resource for good. One call like this wiped a production database in 9 seconds (PocketOS, April 2026). Allow it?` };
+  }
+  if (base === "fly" || base === "flyctl") {
+    const nouns: Record<string, string> = { apps: "app", app: "app", volumes: "volume", volume: "volume", vol: "volume", machine: "machine", machines: "machine", m: "machine", postgres: "Postgres cluster", pg: "Postgres cluster", mpg: "Postgres cluster" };
+    const at = pos.findIndex((w, i) => w === "destroy" || (DELETE_VERBS.has(w) && i > 0 && nouns[pos[i - 1]!] !== undefined));
+    if (at >= 0) return cloud(`the ${at === 0 ? "app" : (nouns[pos[at - 1]!] ?? pos[at - 1]!)}${named(pos[at + 1] ?? optionValue(args, ["-a", "--app"]))}`, "Fly.io");
+  }
+  if (base === "heroku") {
+    const app = named(pos[1] ?? optionValue(args, ["-a", "--app"]));
+    const what: Record<string, string> = {
+      "apps:destroy": `the app${app} and its add-ons`,
+      destroy: `the app${app} and its add-ons`,
+      "pg:reset": `every table of the Postgres database${app}`,
+      "addons:destroy": `the add-on${app}`,
+      "addons:remove": `the add-on${app}`,
+      "pg:backups:delete": `the database backup${app}`,
+      "spaces:destroy": `the private space${app}`,
+      "pipelines:destroy": `the pipeline${app}`,
+    };
+    if (what[pos[0] ?? ""] !== undefined) return cloud(what[pos[0]!]!, "Heroku");
+  }
+  if (base === "vercel" || base === "vc") {
+    if (pos[0] === "remove" || pos[0] === "rm") return cloud(`the deployments of${named(pos[1]) || " a project"}`, "Vercel");
+    if ((pos[0] === "project" || pos[0] === "projects") && DELETE_VERBS.has(pos[1] ?? "")) return cloud(`the project${named(pos[2])} and all its deployments`, "Vercel");
+    if ((pos[0] === "domains" || pos[0] === "domain") && DELETE_VERBS.has(pos[1] ?? "")) return cloud(`the domain${named(pos[2])}`, "Vercel");
+  }
+  if (base === "netlify" && (pos[0] === "sites:delete" || (pos[0] === "sites" && pos[1] === "delete"))) return cloud(`the site${named(pos[pos[0] === "sites" ? 2 : 1])}`, "Netlify");
+  /* Render ne supprime qu'avec `--confirm` : sans, la commande montre ce qu'elle ferait (sa documentation). */
+  if (base === "render" && args.includes("--confirm")) {
+    const rp = positionals(args, new Set(["-o", "--output", "--environment", "--project"]));
+    const at = rp.indexOf("delete");
+    const nouns: Record<string, string> = { services: "service", pg: "Postgres database", kv: "Key Value instance", snapshots: "snapshot", "sandbox-groups": "sandbox group" };
+    if (at > 0) return cloud(`the ${nouns[rp[at - 1]!] ?? rp[at - 1]!}${named(rp[at + 1])}`, "Render");
+  }
+  if (base === "supabase") {
+    if ((pos[0] === "projects" || pos[0] === "branches") && DELETE_VERBS.has(pos[1] ?? "")) return cloud(`the ${pos[0] === "projects" ? "project" : "branch"}${named(pos[2])} and its database`, "Supabase");
+    if (pos[0] === "db" && pos[1] === "reset") {
+      const remote = args.some((a) => a === "--linked" || a === "--db-url" || a.startsWith("--db-url="));
+      return { rule: "db-reset", reason: `${PREFIX}: supabase db reset deletes every table and all the data of ${remote ? "the LINKED remote database" : "your local Supabase database"}, then rebuilds it from the migrations. Allow it?` };
+    }
+  }
+  if (base === "aws") {
+    if (args.includes("--dry-run")) return null;
+    if (pos[0] === "s3" && pos[1] === "rm") return cloud(`${args.includes("--recursive") ? "every object under" : "the object"}${named(pos[2])}`, "AWS S3");
+    if (pos[0] === "s3" && pos[1] === "rb") return cloud(`the bucket${named(pos[2])}${args.includes("--force") ? " and every object in it" : ""}`, "AWS S3");
+    if (pos[0] === "s3" && pos[1] === "sync" && args.includes("--delete") && (pos[3] ?? "").startsWith("s3://")) return cloud(`the objects in ${pos[3]!} that ${pos[2] ?? "the source"} does not have`, "AWS S3");
+    const op = args.findIndex((a) => /^(delete|terminate)-[a-z0-9-]+$/.test(a));
+    if (op >= 0) {
+      const id = args.slice(op + 1).findIndex((a, i, rest) => a.startsWith("--") && rest[i + 1] !== undefined && !rest[i + 1]!.startsWith("-"));
+      const which = id >= 0 ? ` ${args[op + 2 + id]!}` : "";
+      return cloud(`the ${pos[0] ?? ""} ${args[op]!.replace(/^(delete|terminate)-/, "")}${which}`.replace(/\s+/g, " "), "AWS");
+    }
+  }
+  /* Ici, `-r` est la récursion, pas une option qui prend une valeur. */
+  const storage = positionals(args, new Set(["-p", "--project"]));
+  if (base === "gsutil" && (storage[0] === "rb" || (storage[0] === "rm" && args.some((a) => /^-[a-zA-Z]*[rR]/.test(a))))) return cloud(`${storage[0] === "rb" ? "the bucket" : "every object under"}${named(storage[1])}`, "Google Cloud Storage");
+  if (base === "gcloud" && storage[0] === "storage" && storage[1] === "rm" && args.some((a) => a === "--recursive" || /^-[a-zA-Z]*r/.test(a))) return cloud(`every object under${named(storage[2])}`, "Google Cloud Storage");
+  const generic = GENERIC_CLOUD[base];
+  if (generic) {
+    const at = pos.findIndex((w, i) => generic.verbs.has(w) && (i > 0 || base === "wrangler"));
+    if (at >= 0) {
+      /* « sql instances » → « sql instance » : la question nomme UNE ressource. */
+      const noun = pos.slice(Math.max(0, at - 2), at).join(" ").replace(/sses$/, "ss").replace(/([^s])s$/, "$1") || "Worker";
+      return cloud(`the ${noun}${named(pos[at + 1] ?? optionValue(args, ["--name", "-n"]))}`, generic.provider);
+    }
+  }
+
+  /* ─── L'infrastructure ─── */
+  if (base === "terraform" || base === "tofu" || base === "terragrunt") {
+    const sub = positionals(args, new Set());
+    const target = optionValue(args, ["-target", "--target"]);
+    const scope = target !== undefined ? ` (target ${target})` : "";
+    const destroy = sub.includes("destroy") || (sub.includes("apply") && args.some((a) => a === "-destroy" || a === "--destroy"));
+    if (destroy) return { rule: "infra-destroy", reason: `${PREFIX}: ${base} destroy deletes every resource this configuration manages${scope}, and the data they hold, for good. Allow it?` };
+    if (sub.includes("apply") && args.some((a) => a === "-auto-approve" || a === "--auto-approve")) {
+      return { rule: "infra-destroy", reason: `${PREFIX}: ${base} apply -auto-approve changes the real infrastructure without showing the plan to anyone: it can replace or destroy what this configuration manages. Allow it?` };
+    }
+  }
+  if (base === "pulumi") {
+    const stack = named(optionValue(args, ["-s", "--stack"]));
+    if (pos[0] === "destroy" || pos[0] === "down") return { rule: "infra-destroy", reason: `${PREFIX}: pulumi destroy deletes every resource of the stack${stack}, and the data they hold, for good. Allow it?` };
+    if (pos[0] === "stack" && pos[1] === "rm") return { rule: "infra-destroy", reason: `${PREFIX}: pulumi stack rm deletes the stack${named(pos[2]) || stack} and its state. Allow it?` };
+  }
+  if (base === "kubectl" || base === "oc") {
+    const valued = new Set(["-n", "--namespace", "--context", "--cluster", "--kubeconfig", "-l", "--selector", "-f", "--filename", "-o", "--output", "--user", "-s", "--server", "--grace-period", "--timeout", "-k", "--kustomize", "--field-selector", "--as", "--replicas"]);
+    const kp = positionals(args, valued);
+    const namespace = optionValue(args, ["-n", "--namespace"]);
+    const context = optionValue(args, ["--context"]);
+    const where = [namespace !== undefined ? `namespace ${namespace}` : null, context !== undefined ? `context ${context}` : null].filter(Boolean).join(", ");
+    const located = where !== "" ? ` (${where})` : "";
+    if (kp[0] === "delete") {
+      const all = args.some((a) => a === "--all" || a === "-A" || a === "--all-namespaces");
+      const file = optionValue(args, ["-f", "--filename", "-k", "--kustomize"]);
+      const object = kp[1] ?? "";
+      const [kind, name] = object.includes("/") ? object.split("/") : [kp[1], kp[2]];
+      const k = (kind ?? "").toLowerCase().split(",")[0]!;
+      /* Un pod, un job, un événement : le contrôleur le recrée, c'est un redémarrage ordinaire. */
+      if (["pod", "pods", "po", "job", "jobs", "event", "events", "ev"].includes(k) && !all && file === undefined) return null;
+      const what =
+        file !== undefined ? `everything defined in ${file}`
+        : ["namespace", "namespaces", "ns"].includes(k) ? `the namespace${named(name)} and everything in it: its workloads, volume claims and secrets`
+        : ["pvc", "persistentvolumeclaim", "persistentvolumeclaims"].includes(k) ? `the volume claim${named(name)}, and its data if the volume goes with it`
+        : ["pv", "persistentvolume", "persistentvolumes"].includes(k) ? `the persistent volume${named(name)}, and possibly its data`
+        : all ? `all the ${kind ?? "resources"}`
+        : `the ${kind ?? "resource"}${named(name)}`;
+      return { rule: "infra-destroy", reason: `${PREFIX}: kubectl delete removes ${what}${located}, for good. Allow it?` };
+    }
+    const replicas = optionValue(args, ["--replicas"]);
+    if (kp[0] === "scale" && replicas === "0" && /prod/i.test(where)) {
+      return { rule: "infra-destroy", reason: `${PREFIX}: kubectl scale --replicas=0 takes ${kp.slice(1).join(" ") || "this workload"} down${located}: it stops serving. Allow it?` };
+    }
+  }
+  if (base === "helm" && ["uninstall", "delete", "del", "un"].includes(pos[0] ?? "")) {
+    const namespace = optionValue(args, ["-n", "--namespace"]);
+    return { rule: "infra-destroy", reason: `${PREFIX}: helm uninstall deletes the release${named(pos[1])} and every Kubernetes resource it installed${namespace !== undefined ? ` (namespace ${namespace})` : ""}. Allow it?` };
+  }
+
+  /* ─── Les bases, remises à zéro par leur propre outil (`sql-destroy` lit déjà les requêtes de psql, mysql, mongosh…) ─── */
+  const reset = (what: string): Destroys => ({ rule: "db-reset", reason: `${PREFIX}: this deletes ${what}, for good. Allow it?` });
+  if (base === "prisma") {
+    if (pos[0] === "migrate" && pos[1] === "reset") return reset("every table and all the data of the database Prisma points to (DATABASE_URL)");
+    if (pos[0] === "db" && pos[1] === "push" && args.includes("--force-reset")) return reset("every table and all the data of the database Prisma points to (DATABASE_URL)");
+    if (pos[0] === "db" && pos[1] === "push" && args.includes("--accept-data-loss")) return reset("the columns and tables the schema no longer has, with their data");
+  }
+  if (base === "rails" || base === "rake") {
+    const task = pos.find((w) => /^db:(drop(:all)?|reset|purge(:all)?|truncate_all|schema:load|migrate:reset)$/.test(w));
+    if (task !== undefined) return reset(`the data of the database of the current environment (${base} ${task})`);
+  }
+  if ((base === "manage.py" || base === "django-admin") && (pos[0] === "flush" || pos[0] === "reset_db")) return reset(`all the data in the Django database (${pos[0]})`);
+  if (base === "artisan" && /^(migrate:(fresh|reset|refresh)|db:wipe)$/.test(pos[0] ?? "")) return reset(`every table of the Laravel database and its data (artisan ${pos[0]!})`);
+  if (base === "mix" && /^ecto\.(drop|reset)$/.test(pos[0] ?? "")) return reset(`the Ecto database and its data (mix ${pos[0]!})`);
+  if ((base === "sequelize" || base === "sequelize-cli") && pos[0] === "db:drop") return reset("the Sequelize database and its data");
+  if (base === "typeorm" && pos[0] === "schema:drop") return reset("every table of the TypeORM database and its data");
+  if (base === "dropdb") return reset(`the PostgreSQL database${named(pos[pos.length - 1])} and all its data`);
+  if (base === "mysqladmin" && pos[0] === "drop") return reset(`the MySQL database${named(pos[1])} and all its data`);
+  if (["redis-cli", "valkey-cli", "keydb-cli"].includes(base)) {
+    const flush = args.find((a) => /^flush(all|db)$/i.test(a));
+    if (flush !== undefined) return reset(flush.toLowerCase() === "flushall" ? "every key in every database of this Redis server (FLUSHALL)" : "every key in the current Redis database (FLUSHDB)");
+  }
+
+  /* ─── Un appel direct à l'API d'un hébergeur : l'incident PocketOS lui-même ─── */
+  if (["curl", "wget", "http", "https", "xh", "xhs"].includes(base)) {
+    const urls = args.flatMap((a) => {
+      for (const text of [a, /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/|$)/i.test(a) ? `https://${a}` : null]) {
+        if (text === null) continue;
+        try {
+          const url = new URL(text);
+          if (url.protocol === "https:" || url.protocol === "http:") return [url];
+        } catch { /* pas une adresse */ }
+      }
+      return [];
+    });
+    const hit = urls.map((url) => ({ url, provider: HOSTING_APIS.find(([host]) => host.test(url.hostname))?.[1] })).find((x) => x.provider !== undefined);
+    if (hit) {
+      const fused = args.find((a) => /^-X[A-Za-z]+$/.test(a))?.slice(2);
+      const leading = base === "curl" || base === "wget" ? undefined : positionals(args, new Set())[0];
+      const method = (optionValue(args, ["-X", "--request", "--method"]) ?? fused ?? leading ?? "").toUpperCase();
+      const address = `${hit.url.hostname}${hit.url.pathname === "/" ? "" : hit.url.pathname.slice(0, 80)}`;
+      if (method === "DELETE") return { rule: "api-destroy", reason: `${PREFIX}: this sends a DELETE to ${address}, the ${hit.provider!} API: it destroys what that address names, and whatever data it holds, for good. Allow it?` };
+      const mutation = deletingMutation(args.join(" "));
+      if (mutation) return { rule: "api-destroy", reason: `${PREFIX}: this sends the GraphQL mutation ${mutation} to ${hit.url.hostname}, the ${hit.provider!} API: it destroys a resource for good. One call like this wiped a production database in 9 seconds (PocketOS, April 2026). Allow it?` };
+    }
   }
   return null;
 }
