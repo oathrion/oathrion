@@ -92,10 +92,16 @@ function testEnv(file: string, key: string): string | null {
   }
   return null;
 }
+/*
+ * Le compte qui possède le dépôt de test est caché, SAUF s'il est aussi un mainteneur public
+ * déclaré dans `glama.json` (22 novembre : le compte, renommé en nom public, prouve à Glama la
+ * propriété de la fiche). Le nom du dépôt de test, lui, reste toujours caché.
+ */
+const maintainers: string[] = existsSync(join(ROOT, "glama.json")) ? ((JSON.parse(readFileSync(join(ROOT, "glama.json"), "utf8")) as { maintainers?: string[] }).maintainers ?? []) : [];
 const repo = testEnv("github-test.env", "PLACET_GITHUB_TEST_REPO");
 if (repo?.includes("/")) {
   literals.push({ value: repo, replacement: "<compte-de-test>/<dépôt-de-test>" });
-  literals.push({ value: repo.split("/")[0]!, replacement: "<compte-de-test>" });
+  if (!maintainers.includes(repo.split("/")[0]!)) literals.push({ value: repo.split("/")[0]!, replacement: "<compte-de-test>" });
 }
 const channel = testEnv("slack-test.env", "PLACET_SLACK_TEST_CHANNEL");
 if (channel && channel.length >= 6) literals.push({ value: channel, replacement: "<canal-de-test>" });

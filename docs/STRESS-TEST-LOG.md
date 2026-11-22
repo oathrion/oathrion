@@ -1093,7 +1093,7 @@ Second passage, sur le code corrigé, depuis la console :
 
 | | Lues depuis la connexion | Via Placet | Signalées hors Placet |
 |---|---|---|---|
-| GitHub | 2 | 1 (#9) | **#10**, par `<compte-de-test>`, avec son lien |
+| GitHub | 2 | 1 (#9) | **#10**, par `<identifiant retiré>`, avec son lien |
 | Stripe | 2 | 1 | **`re_3US9leJzLw74jVWQ03S9Ehie`**, 1 EUR |
 
 Les remboursements antérieurs à la connexion sont hors fenêtre, comme voulu. Nettoyage :
@@ -1256,7 +1256,7 @@ la session ouverte par le script est fermée aussitôt). Ni le mot de passe ni l
 | 21:50:41 | 1er passage automatique, GitHub et Stripe : **« non vérifié (unreachable) »** — `getaddrinfo EAI_AGAIN`, le réseau était coupé. Ni alerte, ni « propre » |
 | 22:23 | nouveau redémarrage de la machine : le passage de 22:50 n'a pas lieu |
 | 22:40 | lecture directe, hors instance, du compte Stripe sur la même fenêtre (depuis 21:11:13) : 0 écriture, résultat complet |
-| 23:24:04 | passage automatique, GitHub (`<compte-de-test>`, depuis le 24 oct. 11:37) : **propre**, 0 écriture |
+| 23:24:04 | passage automatique, GitHub (`<identifiant retiré>`, depuis le 24 oct. 11:37) : **propre**, 0 écriture |
 | 23:24:08 | passage automatique, Stripe (« environnement de test placet ») : **propre**, 0 écriture |
 
 Les deux paiements annulés et les six suppressions de clients du banc (§5.22) sont
