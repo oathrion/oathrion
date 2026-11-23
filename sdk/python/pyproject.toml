@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "oathrion"
 # PEP 440 : « 0.1.0-preview.0 » se lirait comme une version candidate (0.1.0rc0). La préversion
 # est donc une alpha, 0.1.0a0 — la même que le produit, dans la notation de Python.
-version = "0.1.0a1"
+version = "0.1.0a2"
 description = "Runtime authorization for AI agents — Python client for Oathrion."
 readme = "README.md"
 requires-python = ">=3.9"

@@ -642,6 +642,26 @@ What it proves, and what it does not: that the report has not changed since this
 signed it. It is what Oathrion recorded, not proof that nothing happened outside Oathrion, and
 the fingerprint names a key, not a person or a team.
 
+### An agent's passport
+
+The same facts, for one agent, with what Oathrion knows about it:
+
+```bash
+oathrion receipt passport --agent "Claude Code"      # the last 30 days
+oathrion receipt passport --agent Cursor --for "Acme" --days 90
+```
+
+Who it is: for an agent that goes through Oathrion, the program a person admitted, its
+executable and fingerprint, and when; the name alone is only what the agent calls itself. What
+it may do: the tools it reached (an MCP server, the shell, files) and what happened on each,
+and for Claude Code the hook's rules in force and those you turned off. What it did: actions
+that went through, asked a person, were blocked, and the last one Oathrion stopped. Both
+records' state comes with it. Without `--agent`, the most active agent of the period; an unknown
+name lists the agents Oathrion knows.
+
+It is written to `oathrion-passport-<agent>-<date>.json`, nothing is sent, and
+`oathrion receipt verify` checks it like a report. It holds facts, not a rating.
+
 ### The summary, and what Oathrion stopped
 
 The console opens on « Activity », headed by the summary: today (or the last 7 days), how many

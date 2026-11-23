@@ -1978,6 +1978,55 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           });
           return res.json(signDocument(statement, key.privateKey));
         }
+        case "passport": {
+          /*
+           * Le passeport signé d'UN agent (`server/local-passport.ts`) : le rapport de la période,
+           * plus le programme admis, les outils atteints, les règles du hook. Sans nom, l'agent le
+           * plus actif de la période ; un nom inconnu : 404, avec ceux qui existent.
+           */
+          const text = (value: unknown) => (typeof value === "string" && value.trim() !== "" ? value.trim().slice(0, 300) : null);
+          const since = text(body.since);
+          const until = text(body.until) ?? new Date().toISOString();
+          if (!since || Number.isNaN(Date.parse(since)) || Number.isNaN(Date.parse(until)) || Date.parse(since) > Date.parse(until)) return fail(res, 400, "passport: a since date, before the until date.");
+          const from = new Date(since).toISOString();
+          const to = new Date(until).toISOString();
+          const { verifyJournal } = await import("../cli/wrap/claude-journal");
+          const { readRules } = await import("../cli/wrap/claude-hook");
+          const { RULE_IDS } = await import("../cli/wrap/claude-hook-rules");
+          const { timeline } = await import("./local-activity");
+          const { passportStatement } = await import("./local-passport");
+          const { verifyLocalReceipts } = await import("./local-verify");
+          const { signDocument, signingKey } = await import("@shared/receipt-share");
+          const PASSPORT_EXECUTIONS = 50_000;
+          const { file, lines } = readHookJournal(hub.dir);
+          const executions = await scopeFor(hub.organization).repositories.executions.list(PASSPORT_EXECUTIONS);
+          const entries = timeline(executions, lines, { limit: 1_000_000 });
+          const active = new Map<string, number>();
+          for (const entry of entries) if (entry.at >= from && entry.at <= to) active.set(entry.agent, (active.get(entry.agent) ?? 0) + 1);
+          const known = [...new Set(entries.map((entry) => entry.agent))].sort();
+          const agent = text(body.agent) ?? [...active].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null;
+          if (!agent || !known.includes(agent)) return res.status(404).json({ error: agent ? `No agent named "${agent}" in Oathrion's record.` : "No agent in Oathrion's record yet.", agents: known });
+          const rules = readRules({ OATHRION_WRAP_HOME: path.dirname(hub.dir) } as NodeJS.ProcessEnv);
+          const receipts = await verifyLocalReceipts();
+          const journal = verifyJournal(file);
+          const key = signingKey(hub.dir);
+          const statement = passportStatement({
+            agent,
+            entries,
+            programs: hub.programs.list(),
+            hookRules: { all: RULE_IDS, disabled: rules.disabled ?? new Set(), extraDeny: rules.extraDeny?.length ?? 0, extraAsk: rules.extraAsk?.length ?? 0 },
+            since: from,
+            until: to,
+            subject: text(body.subject)?.slice(0, 120) ?? null,
+            home: homedir(),
+            partial: executions.length >= PASSPORT_EXECUTIONS && (executions.at(-1)?.timestamp ?? "") >= from,
+            receipts: { ok: receipts.ok, entries: receipts.entries, head: receipts.headHash },
+            journal: { ok: journal.ok, entries: journal.entries, head: lines.at(-1)?.hash ?? null },
+            issuer: { name: "Oathrion local", publicKey: key.publicKey, fingerprint: key.fingerprint },
+            issuedAt: new Date().toISOString(),
+          });
+          return res.json(signDocument(statement, key.privateKey));
+        }
         case "journal": {
           /* Le hook de Claude Code enfermé : il AJOUTE au journal, par le pivot ; il ne peut pas le réécrire. */
           const { appendJournal } = await import("../cli/wrap/claude-journal");
@@ -2009,7 +2058,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           hub.detach(holder);
           return res.status(204).end();
         default:
-          return fail(res, 400, "op: attach, server, client, accord, claude-ask, claude-status, bundle, report, status, heartbeat or detach.");
+          return fail(res, 400, "op: attach, server, client, accord, claude-ask, claude-status, bundle, report, passport, status, heartbeat or detach.");
       }
     } catch (error) {
       if (error instanceof ServerConflictError) return fail(res, 409, error.message);

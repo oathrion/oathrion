@@ -26,7 +26,9 @@ export const RECEIPT_TYPE = "oathrion.receipt/v0";
 export const BUNDLE_TYPE = "oathrion.bundle/v0";
 /** Le RAPPORT d'une période : ce que les agents de la machine ont fait, compté (`server/local-report.ts`). */
 export const REPORT_TYPE = "oathrion.report/v0";
-const SIGNED_TYPES: readonly string[] = [RECEIPT_TYPE, BUNDLE_TYPE, REPORT_TYPE];
+/** Le PASSEPORT d'un agent : qui il est, ce qu'il a le droit de faire, ce qu'il a fait (`server/local-passport.ts`). */
+export const PASSPORT_TYPE = "oathrion.passport/v0";
+const SIGNED_TYPES: readonly string[] = [RECEIPT_TYPE, BUNDLE_TYPE, REPORT_TYPE, PASSPORT_TYPE];
 
 /** Ce que toute déclaration signée porte : son type et son émetteur. */
 export interface SignedDocument {

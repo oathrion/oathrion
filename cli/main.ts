@@ -48,7 +48,7 @@ export interface Io {
 }
 
 /* La version du produit (`package.json`) ; `version-coherence.test.ts` refuse qu'elle diverge. */
-export const VERSION = "0.1.0-preview.1";
+export const VERSION = "0.1.0-preview.2";
 
 const HELP = `Oathrion — runtime authorization for AI agents.
 

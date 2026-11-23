@@ -6,6 +6,14 @@ compatibility, and the entry says so.
 
 ## [Unreleased]
 
+## [0.1.0-preview.2] — 2026-11-23
+
+- **An agent's passport, signed.** `oathrion receipt passport --agent "Claude Code"` signs who an
+  agent is (the program a person admitted and its fingerprint), what it may do (the tools it
+  reached, the hook's rules in force) and what it did over a period (what went through, asked a
+  person, was blocked, and the last action Oathrion stopped). Facts, not a rating. Nothing is
+  sent; `oathrion receipt verify` checks it and refuses an altered one without showing it.
+
 - **Destroying production now needs a person, in Claude Code.** In April 2026, an AI agent
   deleted a company's production database in 9 seconds, with a single call to its hosting
   provider's API and a token that could do everything (PocketOS, on Railway). Oathrion let that
@@ -81,7 +89,7 @@ compatibility, and the entry says so.
   question in the typical session. The new rules turn off like the others (`rm-unreadable-path`,
   `gh-publish`, `secret-egress`).
 
-## [0.1.0-preview.1] — planned for 2026-11-17, with the public announcement
+## [0.1.0-preview.1] — on npm since 2026-11-17
 
 What the first users asked for, in the first trials with a real client (Cursor, in front of the
 real filesystem server). Upgrading from `0.1.0-preview.0` needs nothing: the data of the

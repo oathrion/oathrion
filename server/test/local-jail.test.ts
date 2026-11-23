@@ -65,6 +65,7 @@ describe("signé avec le secret relais", () => {
     expect((await op({ op: "accord", server: "carnet", verb: "mcp.carnet.delete_note" })).status).toBe(403);
     expect((await op({ op: "bundle", project: "/tmp", scope: { since: "2026-11-01" } })).status).toBe(403);
     expect((await op({ op: "report", since: "2026-11-01" })).status).toBe(403);
+    expect((await op({ op: "passport", since: "2026-11-01" })).status).toBe(403);
   });
 
   it("jail-open : seulement dehors, et avec une identité", async () => {
@@ -248,5 +249,22 @@ describe("signé avec le secret de session (dehors)", () => {
     expect(statement.evidence.journal.intact).toBe(true);
     expect((await op({ op: "report", since: "pas une date" }, "outside")).status).toBe(400);
     expect((await op({ op: "report", since, until: "2020-01-01" }, "outside")).status).toBe(400);
+  });
+
+  it("signe le passeport d'un agent ; un agent inconnu : 404, avec ceux qui existent", async () => {
+    const { verifyShared, PASSPORT_TYPE } = await import("@shared/receipt-share");
+    const since = new Date(Date.now() - 3_600_000).toISOString();
+    const answer = await op({ op: "passport", agent: "Claude Code", since, subject: "Équipe test" }, "outside");
+    expect(answer.status).toBe(200);
+    expect(verifyShared(answer.body)).toMatchObject({ ok: true });
+    const statement = answer.body.statement as { type: string; agent: { name: string }; tools: { tool: string }[]; hookRules: { inForce: string[] } | null; lastStopped: { rule: string } | null };
+    expect(statement.type).toBe(PASSPORT_TYPE);
+    expect(statement.agent.name).toBe("Claude Code");
+    expect(statement.tools.map((t) => t.tool)).toContain("shell");
+    expect(statement.hookRules?.inForce).toContain("rm-outside-project");
+    expect(statement.lastStopped?.rule).toBe("rm-outside-project");
+    const unknown = await op({ op: "passport", agent: "Devin", since }, "outside");
+    expect(unknown.status).toBe(404);
+    expect(unknown.body.agents).toContain("Claude Code");
   });
 });

@@ -1,6 +1,6 @@
 {
   "name": "oathrion",
-  "version": "0.1.0-preview.1",
+  "version": "0.1.0-preview.2",
   "description": "Oathrion (Autonomous Risk & Integrity Authority) — the control plane for autonomous AI. Every agent action is submitted for a decision before it can reach a tool.",
   "private": true,
   "engines": {

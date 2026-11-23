@@ -13,9 +13,10 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { BUNDLE_TYPE, REPORT_TYPE, extractShared, verifyShared, type SharedReceipt, type Signed } from "@shared/receipt-share";
+import { BUNDLE_TYPE, PASSPORT_TYPE, REPORT_TYPE, extractShared, verifyShared, type SharedReceipt, type Signed } from "@shared/receipt-share";
 
 import type { BundleStatement } from "../../server/local-bundle";
+import type { PassportStatement } from "../../server/local-passport";
 import type { ReportStatement } from "../../server/local-report";
 
 import { bundleLines, bundleMarkdown, bundleVerdict, noReceiptMarkdown, runGit, type Git } from "./bundle";
@@ -23,6 +24,7 @@ import { journalPath, verifyJournal } from "./claude-journal";
 import { HUB_DIRNAME } from "./hub";
 import { localBundle, stateRoot } from "./launch";
 import { nameProblem } from "./name";
+import { passportLines } from "./passport";
 import { reportLines } from "./report";
 
 interface Verdict {
@@ -140,10 +142,12 @@ export function runReceipts(argv: readonly string[], env: NodeJS.ProcessEnv, out
 export const RECEIPT_USAGE = `
 oathrion receipt bundle [--base <ref>]          sign what Claude Code did on this branch, for the PR
 oathrion receipt report [--days <n>]            sign what your agents did over a period, to give on request
+oathrion receipt passport [--agent <name>]      sign an agent's passport: who it is, what it may do, what it did
 oathrion receipt verify <file|folder>... [--github] [--require]
 
-  Checks receipts, branch receipts and reports someone shared with you (the .html file, or the JSON),
-  offline and without trusting the page: the signature, and the fingerprint that signed.
+  Checks receipts, branch receipts, reports and passports someone shared with you (the .html
+  file, or the JSON), offline and without trusting the page: the signature, and the fingerprint
+  that signed.
   --github   in a GitHub Action: writes the pull request's summary, says which commits the
              receipt does not cover, and accepts only OATHRION_TRUSTED_FINGERPRINTS if set.
   --require  fail when there is no receipt at all.
@@ -210,9 +214,10 @@ export function runReceipt(argv: readonly string[], out: (l: string) => void, er
       if (!verdict.ok) code = Math.max(code, 1);
       continue;
     }
-    if (statement?.type === REPORT_TYPE) {
+    if (statement?.type === REPORT_TYPE || statement?.type === PASSPORT_TYPE) {
       const pinned = trusted.length === 0 ? null : check.ok && trusted.includes(check.fingerprint.replace(/\s+/g, "").toLowerCase());
-      for (const line of reportLines(shared as Signed<ReportStatement>, check, pinned)) out(line);
+      const lines = statement.type === REPORT_TYPE ? reportLines(shared as Signed<ReportStatement>, check, pinned) : passportLines(shared as Signed<PassportStatement>, check, pinned);
+      for (const line of lines) out(line);
       if (!check.ok || pinned === false) code = Math.max(code, 1);
       continue;
     }

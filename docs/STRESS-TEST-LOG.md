@@ -3833,3 +3833,27 @@ complet : `notes/BENCH-COMPARATIF-2026-11-22-rapport.md`.
 en mode automatique ; 57 commandes demandées, chacune avec ce que dit sa question ; 51 qui doivent
 passer ; la session à risque ; la désactivation des quatre règles. Suite complète, dans un
 dossier personnel jetable : 3 966 tests réussis, 85 ignorés, aucun échec.
+
+### 5.86 Le passeport d'un agent, et le paquet 0.1.0-preview.2 essayé installé
+
+Le 23 novembre 2026. `oathrion receipt passport` signe le passeport d'un agent
+(`server/local-passport.ts`, type `oathrion.passport/v0`) : le programme admis par une personne,
+les outils atteints, les règles du hook en vigueur, les comptes de la période, la dernière action
+arrêtée.
+
+**Tests** : 5 sur la fonction (seulement les actions de l'agent ; le programme admis et jamais
+celui qui a été bloqué ; aucun chemin personnel ; signature), 5 sur la commande et sa
+vérification, et un de bout en bout sur le pivot local (passeport signé ; agent inconnu : 404 avec
+la liste ; relais enfermé : 403). Suite complète : 3 977 tests passés, aucun échec.
+
+**Essai réel**, avec le paquet `oathrion-0.1.0-preview.2.tgz` installé dans un dossier jetable :
+- `rm -rf ~/photos` envoyé au hook : refusé ; puis `oathrion receipt passport` : « 4 action(s) …
+  1 blocked », « ✋ Last stopped: rm -rf ~/photos », 25 règles en vigueur ; code 0 ;
+- `oathrion receipt verify` sur le passeport : « Verified passport », code 0 ;
+- le même fichier avec `"total": 4` changé en 9 : « NOT VALID … not shown », code 1 ;
+- `--agent Devin` : « Agents Oathrion knows: "Claude Code" », code 3.
+
+**Une erreur de méthode, corrigée pendant l'essai** : un premier essai avec `rm -rf` dans `/tmp`
+ne bloquait rien (`/tmp` est libre), et la copie « altérée » remplaçait un texte absent du
+fichier, donc ne changeait rien ; la vérification l'acceptait à raison. Refait avec une
+suppression hors du projet et un chiffre réellement changé.
