@@ -139,6 +139,7 @@ import { isLocalMode } from "./local-mode";
 import { waitForApprovalSignal } from "./approval-events";
 import { activeHub, HubClosingError, ServerConflictError } from "./local-hub";
 import { ClaudeAsks } from "./local-claude-asks";
+import { readPhoneApprovals } from "./local-phone-approvals";
 import { LOCAL_ADMIN_EMAIL, LOCAL_ORGANIZATION } from "./local-bootstrap";
 import { checkLocalLoginTicket, mintLocalLoginTicket } from "@shared/local-login-ticket";
 import { claimDecideToken } from "./local-decide-links";
@@ -549,6 +550,52 @@ function param(req: Request, name: string): string {
  * existing caller or test breaks. See shared/error-codes.ts for why both keys are sent.
  */
 /** Le journal du hook Claude Code du pivot : son fichier, et ses lignes lisibles. */
+/**
+ * Le périmètre d'un relevé de client, tel qu'il arrive (`--project`, `--server`, ou la console) :
+ * un dossier absolu et des noms de serveurs. Absent : toute la machine.
+ */
+function reportScope(raw: unknown): import("./local-report").ReportScope | null | "invalid" {
+  if (!raw || typeof raw !== "object") return null;
+  const candidate = raw as { project?: unknown; servers?: unknown };
+  const project = typeof candidate.project === "string" && path.isAbsolute(candidate.project) ? candidate.project.slice(0, 1_000) : null;
+  const servers = Array.isArray(candidate.servers) ? candidate.servers.filter((name): name is string => typeof name === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(name)).slice(0, 50) : [];
+  return project === null && servers.length === 0 ? "invalid" : { project, servers };
+}
+
+/**
+ * Le rapport d'une période, ou le relevé d'un client (`server/local-report.ts`) : les deux chaînes
+ * relues EN ENTIER, les accords signés par les téléphones rattachés. Non signé : la clé vide.
+ */
+async function localReport(
+  hub: NonNullable<ReturnType<typeof activeHub>>,
+  input: { since: string; until: string; subject: string | null; countsOnly: boolean; scope: import("./local-report").ReportScope | null; issuer: { name: string; publicKey: string; fingerprint: string } },
+): Promise<import("./local-report").ReportStatement> {
+  const { verifyJournal } = await import("../cli/wrap/claude-journal");
+  const { timeline } = await import("./local-activity");
+  const { reportStatement } = await import("./local-report");
+  const { verifyLocalReceipts } = await import("./local-verify");
+  const REPORT_EXECUTIONS = 50_000;
+  const { file, lines } = readHookJournal(hub.dir);
+  const executions = await scopeFor(hub.organization).repositories.executions.list(REPORT_EXECUTIONS);
+  const receipts = await verifyLocalReceipts();
+  const journal = verifyJournal(file);
+  return reportStatement({
+    scope: input.scope,
+    entries: timeline(executions, lines, { limit: 1_000_000, approvals: readPhoneApprovals(hub.dir) }),
+    since: input.since,
+    until: input.until,
+    subject: input.subject,
+    home: homedir(),
+    countsOnly: input.countsOnly,
+    /* La plus ancienne exécution relue est encore dans la période : il y en a peut-être d'autres avant. */
+    partial: executions.length >= REPORT_EXECUTIONS && (executions.at(-1)?.timestamp ?? "") >= input.since,
+    receipts: { ok: receipts.ok, entries: receipts.entries, head: receipts.headHash },
+    journal: { ok: journal.ok, entries: journal.entries, head: lines.at(-1)?.hash ?? null },
+    issuer: input.issuer,
+    issuedAt: new Date().toISOString(),
+  });
+}
+
 function readHookJournal(hubDir: string): { file: string; lines: import("../cli/wrap/claude-journal").JournalEntry[] } {
   const file = path.join(hubDir, "claude-code", "journal.jsonl");
   if (!fs.existsSync(file)) return { file, lines: [] };
@@ -1129,7 +1176,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const executions = await repositories.executions.list(2_000);
       const agent = typeof req.query.agent === "string" && req.query.agent !== "" ? req.query.agent : undefined;
       const limit = Math.min(Math.max(Number(req.query.limit) || 300, 1), 2_000);
-      const all = timeline(executions, lines, { limit: 100_000 });
+      const all = timeline(executions, lines, { limit: 100_000, approvals: readPhoneApprovals(hub.dir) });
       res.json({
         entries: agent ? all.filter((entry) => entry.agent === agent).slice(0, limit) : all.slice(0, limit),
         agents: [...new Set(all.map((entry) => entry.agent))].sort(),
@@ -1165,13 +1212,194 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const journal = verifyJournal(file);
       res.json({
         period: req.query.period === "7d" ? "7d" : "today",
-        ...summarize(timeline(await repositories.executions.list(5_000), lines, { limit: 100_000 }), {
+        ...summarize(timeline(await repositories.executions.list(5_000), lines, { limit: 100_000, approvals: readPhoneApprovals(hub.dir) }), {
           since: since.toISOString(),
           until: now.toISOString(),
           receipts: { ok: receipts.ok, entries: receipts.entries, reason: receipts.reason },
           journal: { ok: journal.ok, entries: journal.entries, reason: journal.reason },
         }),
       });
+    }),
+  );
+
+  /*
+   * GET /api/local/passports — LES PASSEPORTS DES AGENTS (23 novembre : la console tourne autour
+   * du passeport, `notes/CONSTRUCTION-CONSOLE-PASSEPORT.md`). Pour chaque agent qu'Oathrion a vu :
+   * son visage (mascotte, nom) et son passeport non signé sur la période (`?days=7` par défaut,
+   * `server/local-passport.ts`). `GET /api/local/passports/share?agent=` : le même, signé, à
+   * télécharger (« Share passport »), les deux chaînes relues en entier.
+   */
+  const passportInputs = async (hub: NonNullable<ReturnType<typeof activeHub>>, req: Request, full: boolean) => {
+    const { repositories } = scope(req);
+    const { verifyJournal } = await import("../cli/wrap/claude-journal");
+    const { readRules } = await import("../cli/wrap/claude-hook");
+    const { RULE_IDS } = await import("../cli/wrap/claude-hook-rules");
+    const { timeline } = await import("./local-activity");
+    const { verifyLocalReceipts } = await import("./local-verify");
+    const LIMIT = 50_000;
+    const { file, lines } = readHookJournal(hub.dir);
+    const executions = await repositories.executions.list(LIMIT);
+    const rules = readRules({ OATHRION_WRAP_HOME: path.dirname(hub.dir) } as NodeJS.ProcessEnv);
+    const receipts = await verifyLocalReceipts(full ? {} : { sinceLastCheck: true });
+    const journal = verifyJournal(file);
+    return {
+      entries: timeline(executions, lines, { limit: 1_000_000, approvals: readPhoneApprovals(hub.dir) }),
+      programs: hub.programs.list(),
+      hookRules: { all: RULE_IDS, disabled: rules.disabled ?? new Set<string>(), extraDeny: rules.extraDeny?.length ?? 0, extraAsk: rules.extraAsk?.length ?? 0 },
+      oldest: executions.length >= LIMIT ? (executions.at(-1)?.timestamp ?? "") : "",
+      receipts: { ok: receipts.ok, entries: receipts.entries, head: receipts.headHash },
+      journal: { ok: journal.ok, entries: journal.entries, head: lines.at(-1)?.hash ?? null },
+    };
+  };
+  const passportDays = (raw: unknown, fallback: number) => {
+    const days = Number(raw);
+    return Number.isInteger(days) && days >= 1 && days <= 3_660 ? days : fallback;
+  };
+
+  app.get(
+    "/api/local/passports",
+    requireCapability("read"),
+    handle(async (req, res) => {
+      const hub = activeHub();
+      if (!isLocalMode() || !hub) return fail(res, 404, "Not found");
+      const { passportStatement } = await import("./local-passport");
+      const inputs = await passportInputs(hub, req, false);
+      const until = new Date().toISOString();
+      const since = new Date(Date.now() - passportDays(req.query.days, 7) * 24 * 3_600_000).toISOString();
+      const agents = [...new Set(inputs.entries.map((entry) => entry.agent))];
+      const passports = agents.map((agent) => ({
+        agent,
+        face: hub.mascots.of(agent),
+        passport: passportStatement({
+          ...inputs,
+          agent,
+          since,
+          until,
+          subject: null,
+          home: homedir(),
+          partial: inputs.oldest !== "" && inputs.oldest >= since,
+          issuer: { name: "Oathrion local", publicKey: "", fingerprint: "" },
+          issuedAt: until,
+        }),
+      }));
+      passports.sort((a, b) => b.passport.record.total - a.passport.record.total || a.agent.localeCompare(b.agent));
+      res.json({ since, until, passports });
+    }),
+  );
+
+  app.get(
+    "/api/local/passports/share",
+    requireCapability("read"),
+    handle(async (req, res) => {
+      const hub = activeHub();
+      if (!isLocalMode() || !hub) return fail(res, 404, "Not found");
+      const agent = typeof req.query.agent === "string" ? req.query.agent : "";
+      const { passportStatement } = await import("./local-passport");
+      const { signDocument, signingKey } = await import("@shared/receipt-share");
+      const inputs = await passportInputs(hub, req, true);
+      if (!inputs.entries.some((entry) => entry.agent === agent)) return fail(res, 404, `No agent named "${agent.slice(0, 80)}" in Oathrion's record.`);
+      const key = signingKey(hub.dir);
+      const until = new Date().toISOString();
+      const since = new Date(Date.now() - passportDays(req.query.days, 30) * 24 * 3_600_000).toISOString();
+      const statement = passportStatement({
+        ...inputs,
+        agent,
+        since,
+        until,
+        subject: null,
+        home: homedir(),
+        partial: inputs.oldest !== "" && inputs.oldest >= since,
+        issuer: { name: "Oathrion local", publicKey: key.publicKey, fingerprint: key.fingerprint },
+        issuedAt: until,
+      });
+      const slug = agent.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "agent";
+      const signed = signDocument(statement, key.privateKey);
+      if (req.query.format === "json") {
+        res.setHeader("Content-Disposition", `attachment; filename="oathrion-passport-${slug}-${until.slice(0, 10)}.json"`);
+        return res.json(signed);
+      }
+      /* Une page qui se vérifie seule, pour qui n'ouvre pas un terminal (`server/statement-html.ts`). */
+      const { passportHtml } = await import("./statement-html");
+      res.setHeader("Content-Disposition", `attachment; filename="oathrion-passport-${slug}-${until.slice(0, 10)}.html"`);
+      res.type("text/html").send(passportHtml(signed));
+    }),
+  );
+
+  /*
+   * LE RELEVÉ D'UN CLIENT (« Send proof → A client », `notes/CONCEPTION-SAINT-GRAAL-RECUS.md`) :
+   * ce que les agents ont fait dans un dossier et sur des serveurs, sur une période, avec les
+   * décisions des personnes et l'accord signé par leur téléphone.
+   *   · `GET /api/local/statement/options` : les dossiers où Claude Code a travaillé, les serveurs ;
+   *   · `GET /api/local/statement` : l'aperçu, non signé — exactement ce qui sortira ;
+   *   · `GET /api/local/statement/share` : la page signée qui se vérifie seule, à télécharger.
+   * Rien ne part : la personne télécharge, lit, puis envoie elle-même.
+   */
+  const statementInput = (req: Request) => {
+    const text = (value: unknown, max: number) => (typeof value === "string" && value.trim() !== "" ? value.trim().slice(0, max) : null);
+    const rawProject = text(req.query.project, 1_000);
+    const project = rawProject?.startsWith("~/") ? path.join(homedir(), rawProject.slice(2)) : rawProject;
+    const servers = (text(req.query.servers, 2_000) ?? "").split(",").map((name) => name.trim()).filter(Boolean);
+    const scope = project !== null || servers.length > 0 ? reportScope({ project, servers }) : null;
+    const until = new Date().toISOString();
+    return { scope, subject: text(req.query.for, 120), since: new Date(Date.now() - passportDays(req.query.days, 30) * 24 * 3_600_000).toISOString(), until };
+  };
+
+  app.get(
+    "/api/local/statement/options",
+    requireCapability("read"),
+    handle(async (_req, res) => {
+      const hub = activeHub();
+      if (!isLocalMode() || !hub) return fail(res, 404, "Not found");
+      const { lines } = readHookJournal(hub.dir);
+      /* Les dossiers où Claude Code a travaillé : celui de la commande, ou celui du fichier écrit. Un sous-dossier compte pour son parent. */
+      const counts = new Map<string, number>();
+      for (const line of lines) {
+        if (line.phase !== "pre") continue;
+        const folder = line.target.startsWith("shell://") ? line.target.slice("shell://".length) : line.target.startsWith("file://") ? path.dirname(line.target.slice("file://".length)) : null;
+        if (folder && path.isAbsolute(folder)) counts.set(folder, (counts.get(folder) ?? 0) + 1);
+      }
+      const home = homedir();
+      const kept: { path: string; actions: number }[] = [];
+      for (const folder of [...counts.keys()].sort((a, b) => a.length - b.length)) {
+        const parent = kept.find((k) => folder === k.path || folder.startsWith(`${k.path}/`));
+        if (parent) parent.actions += counts.get(folder)!;
+        else if (folder !== "/" && folder !== home && folder !== path.dirname(home)) kept.push({ path: folder, actions: counts.get(folder)! });
+      }
+      kept.sort((a, b) => b.actions - a.actions);
+      res.json({
+        projects: kept.slice(0, 12).map((k) => ({ ...k, display: k.path.startsWith(`${home}/`) ? `~${k.path.slice(home.length)}` : k.path })),
+        servers: hub.serverNames().sort(),
+      });
+    }),
+  );
+
+  app.get(
+    "/api/local/statement",
+    requireCapability("read"),
+    handle(async (req, res) => {
+      const hub = activeHub();
+      if (!isLocalMode() || !hub) return fail(res, 404, "Not found");
+      const input = statementInput(req);
+      if (input.scope === "invalid") return fail(res, 400, "Choose a project folder (an absolute path) or a server.");
+      res.json(await localReport(hub, { ...input, scope: input.scope, countsOnly: false, issuer: { name: "Oathrion local", publicKey: "", fingerprint: "" } }));
+    }),
+  );
+
+  app.get(
+    "/api/local/statement/share",
+    requireCapability("read"),
+    handle(async (req, res) => {
+      const hub = activeHub();
+      if (!isLocalMode() || !hub) return fail(res, 404, "Not found");
+      const input = statementInput(req);
+      if (input.scope === "invalid") return fail(res, 400, "Choose a project folder (an absolute path) or a server.");
+      const { signDocument, signingKey } = await import("@shared/receipt-share");
+      const { statementHtml } = await import("./statement-html");
+      const key = signingKey(hub.dir);
+      const statement = await localReport(hub, { ...input, scope: input.scope, countsOnly: false, issuer: { name: "Oathrion local", publicKey: key.publicKey, fingerprint: key.fingerprint } });
+      const slug = (input.subject ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      res.setHeader("Content-Disposition", `attachment; filename="oathrion-statement-${slug ? `${slug}-` : ""}${input.until.slice(0, 10)}.html"`);
+      res.type("text/html").send(statementHtml(signDocument(statement, key.privateKey)));
     }),
   );
 
@@ -1197,7 +1425,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { receiptHtml } = await import("./receipt-share-html");
       const { file, lines } = readHookJournal(hub.dir);
       const executions = await repositories.executions.list(5_000);
-      const entry = timeline(executions, lines, { limit: 100_000 }).find((candidate) => candidate.ref === ref);
+      const entry = timeline(executions, lines, { limit: 100_000, approvals: readPhoneApprovals(hub.dir) }).find((candidate) => candidate.ref === ref);
       if (!entry) return fail(res, 404, "No action with this reference.");
 
       let evidence: import("./local-receipt").ChainEvidence;
@@ -1465,6 +1693,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       const decided = (await scope(req).repositories.approvals.list(1)).some((approval) => approval.status !== "pending");
       const telegram = readTelegram(hub.dir);
+      const { readRelay, readRelayTicket, relayPaired } = await import("./local-phone-relay");
+      const relay = readRelay(hub.dir);
+      const relayWeb = relayPaired(relay) && readRelayTicket(relay, relay.ticket)?.kind === "web";
       /*
        * Branché AU MOINS UNE FOIS (le pivot garde la commande de chaque serveur lancé, `serveurs/`),
        * ou en ce moment : un client fermé le soir ne fait pas revenir « redémarre Cursor ».
@@ -1482,7 +1713,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           /* Protégé pour de vrai : un client s'est branché par Oathrion (pas seulement sa configuration changée, avant qu'il redémarre). */
           { id: "protected", done: protectedServers > 0 && connected > 0, count: protectedServers, connected },
           { id: "demo", done: fs.existsSync(path.join(hub.dir, DEMO_SEEN)) },
-          { id: "phone", done: paired(telegram), bot: paired(telegram) ? telegram.bot : null },
+          { id: "phone", done: paired(telegram) || relayPaired(relay), bot: relayWeb ? null : relayPaired(relay) ? (relay.bot ?? "OathrionBot") : paired(telegram) ? telegram.bot : null, ...(relayWeb ? { device: relay.account ?? "your phone" } : {}) },
           /* Facultatif : un plaisir, pas une protection. */
           { id: "named", done: Object.keys(hub.mascots.list()).length > 0, optional: true },
           { id: "decision", done: decided },
@@ -1610,6 +1841,57 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }),
   );
 
+  /*
+   * LE TÉLÉPHONE EN UN SCAN (23 novembre, `server/local-phone-relay.ts`) : le robot officiel, par
+   * le relais d'Oathrion. « Pair my phone » rend le QR code ; la console relit l'état jusqu'au « Paired ».
+   */
+  const relayPhone = async (dir: string) => {
+    const { relayPhoneFor } = await import("./local-phone-relay");
+    const mascot = path.join(path.dirname(process.argv[1] ?? ""), "public", "mascots", "warden.png");
+    return relayPhoneFor(dir, { mascot: fs.existsSync(mascot) ? mascot : null });
+  };
+  app.get(
+    "/api/local/phone/relay",
+    requireCapability("manage"),
+    handle(async (_req, res) => {
+      const hub = activeHub();
+      if (!isLocalMode() || !hub) return fail(res, 404, "Not found");
+      res.json((await relayPhone(hub.dir)).status());
+    }),
+  );
+  app.post(
+    "/api/local/phone/relay/pair",
+    requireCapability("manage"),
+    handle(async (_req, res) => {
+      const hub = activeHub();
+      if (!isLocalMode() || !hub) return fail(res, 404, "Not found");
+      res.json(await (await relayPhone(hub.dir)).pair());
+    }),
+  );
+  app.post(
+    "/api/local/phone/relay/unpair",
+    requireCapability("manage"),
+    handle(async (_req, res) => {
+      const hub = activeHub();
+      if (!isLocalMode() || !hub) return fail(res, 404, "Not found");
+      res.json(await (await relayPhone(hub.dir)).unpair());
+    }),
+  );
+  app.post(
+    "/api/local/phone/relay/test",
+    requireCapability("manage"),
+    handle(async (_req, res) => {
+      const hub = activeHub();
+      if (!isLocalMode() || !hub) return fail(res, 404, "Not found");
+      try {
+        await (await relayPhone(hub.dir)).test();
+        res.json({ ok: true });
+      } catch (error) {
+        fail(res, 409, error instanceof Error ? error.message : String(error));
+      }
+    }),
+  );
+
   app.get(
     "/api/local/settings",
     requireCapability("read"),
@@ -1618,9 +1900,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!isLocalMode() || !hub) return fail(res, 404, "Not found");
       const { readNotificationSettings } = await import("./local-notifications");
       const { paired, readTelegram } = await import("./local-telegram");
+      const { readRelay, readRelayTicket, relayPaired } = await import("./local-phone-relay");
       const phoneOf = (dir: string) => {
+        const relay = readRelay(dir);
+        /* `web` : les notifications du navigateur ; sinon le robot officiel. */
+        if (relayPaired(relay)) return { paired: true, bot: relay.bot ?? "OathrionBot", via: "relay" as const, kind: readRelayTicket(relay, relay.ticket)?.kind ?? "telegram", account: relay.account ?? null };
         const telegram = readTelegram(dir);
-        return paired(telegram) ? { paired: true, bot: telegram.bot } : { paired: false, bot: null };
+        return paired(telegram) ? { paired: true, bot: telegram.bot, via: "own-bot" as const, account: null } : { paired: false, bot: null, via: null, account: null };
       };
       const home = process.env.HOME ?? "";
       const notifications = readNotificationSettings(hub.dir);
@@ -1928,11 +2214,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const { verifyJournal } = await import("../cli/wrap/claude-journal");
           const { bundleStatement } = await import("./local-bundle");
           const { signDocument, signingKey } = await import("@shared/receipt-share");
+          const { handoffAnswers, handoffDecisions } = await import("./local-activity");
           const { file, lines } = readHookJournal(hub.dir);
           const verdict = verifyJournal(file);
           const key = signingKey(hub.dir);
+          const handoffs = (await scopeFor(hub.organization).repositories.executions.list(50_000)).filter((execution) => execution.action.startsWith("mcp.claude-code."));
           const statement = bundleStatement({
             lines,
+            answers: handoffAnswers(handoffs),
+            decisions: handoffDecisions(handoffs),
+            approvals: readPhoneApprovals(hub.dir),
             project,
             home: homedir(),
             scope: { repository: text(raw.repository), branch: text(raw.branch), base: text(raw.base), head: text(raw.head), since, until },
@@ -1951,30 +2242,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const since = text(body.since);
           const until = text(body.until) ?? new Date().toISOString();
           if (!since || Number.isNaN(Date.parse(since)) || Number.isNaN(Date.parse(until)) || Date.parse(since) > Date.parse(until)) return fail(res, 400, "report: a since date, before the until date.");
-          const { verifyJournal } = await import("../cli/wrap/claude-journal");
-          const { timeline } = await import("./local-activity");
-          const { reportStatement } = await import("./local-report");
-          const { verifyLocalReceipts } = await import("./local-verify");
+          const scope = reportScope(body.scope);
+          if (scope === "invalid") return fail(res, 400, "report: a scope needs an absolute project folder or a server name.");
           const { signDocument, signingKey } = await import("@shared/receipt-share");
-          const REPORT_EXECUTIONS = 50_000;
-          const { file, lines } = readHookJournal(hub.dir);
-          const executions = await scopeFor(hub.organization).repositories.executions.list(REPORT_EXECUTIONS);
-          const receipts = await verifyLocalReceipts();
-          const journal = verifyJournal(file);
           const key = signingKey(hub.dir);
-          const statement = reportStatement({
-            entries: timeline(executions, lines, { limit: 1_000_000 }),
+          const statement = await localReport(hub, {
             since: new Date(since).toISOString(),
             until: new Date(until).toISOString(),
             subject: text(body.subject)?.slice(0, 120) ?? null,
-            home: homedir(),
             countsOnly: body.countsOnly === true,
-            /* La plus ancienne exécution relue est encore dans la période : il y en a peut-être d'autres avant. */
-            partial: executions.length >= REPORT_EXECUTIONS && (executions.at(-1)?.timestamp ?? "") >= new Date(since).toISOString(),
-            receipts: { ok: receipts.ok, entries: receipts.entries, head: receipts.headHash },
-            journal: { ok: journal.ok, entries: journal.entries, head: lines.at(-1)?.hash ?? null },
+            scope,
             issuer: { name: "Oathrion local", publicKey: key.publicKey, fingerprint: key.fingerprint },
-            issuedAt: new Date().toISOString(),
           });
           return res.json(signDocument(statement, key.privateKey));
         }
@@ -2000,7 +2278,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const PASSPORT_EXECUTIONS = 50_000;
           const { file, lines } = readHookJournal(hub.dir);
           const executions = await scopeFor(hub.organization).repositories.executions.list(PASSPORT_EXECUTIONS);
-          const entries = timeline(executions, lines, { limit: 1_000_000 });
+          const entries = timeline(executions, lines, { limit: 1_000_000, approvals: readPhoneApprovals(hub.dir) });
           const active = new Map<string, number>();
           for (const entry of entries) if (entry.at >= from && entry.at <= to) active.set(entry.agent, (active.get(entry.agent) ?? 0) + 1);
           const known = [...new Set(entries.map((entry) => entry.agent))].sort();

@@ -77,7 +77,7 @@ export interface McpContext {
 
 /** Server identity, echoed in every result's `_meta`. */
 /* La version du produit ; `version-coherence.test.ts` refuse qu'elle diverge de `package.json`. */
-const SERVER_INFO = { name: "oathrion", version: "0.1.0-preview.2" } as const;
+const SERVER_INFO = { name: "oathrion", version: "0.1.0-preview.6" } as const;
 
 /**
  * How long a client may cache a tool listing: not at all.

@@ -627,7 +627,7 @@ quatre passages mesurés jusqu'au bout, reçus et exécutions sont restés égau
 ### 5.10 GitHub réel — `verify:launch` et `verify:github`
 
 Credential : jeton GitHub *fine-grained* de l'utilisateur, limité au seul dépôt de test
-`<compte-de-test>/<dépôt-de-test>` (Issues R/W, Metadata R), lu depuis
+`<identifiant retiré>/placet-essai` (Issues R/W, Metadata R), lu depuis
 `~/.config/placet/github-test.env` (600), jamais affiché ; aucune occurrence du préfixe du
 jeton dans les sorties (vérifié à chaque passage).
 
@@ -655,7 +655,7 @@ Credentials de test créés le 21 octobre, chacun lu depuis son fichier
 de l'utilisateur, avec son accord pour chaque création : application Slack « Placet essai »
 dans l'espace `kryxor`, créée depuis un manifeste avec exactement cinq portées de bot
 (`chat:write`, `channels:read`, `channels:history`, `groups:read`, `groups:history`),
-installée et jeton copié **par l'utilisateur** ; canal `#placet-essai` (`<canal-de-test>`) ;
+installée et jeton copié **par l'utilisateur** ; canal `#placet-essai` (`C0CB4JUA5C4`) ;
 espace Linear « Placet essai » (région UE) et son équipe par défaut `PLA`, clé d'API créée
 et copiée **par l'utilisateur**. Aucune connexion Linear ↔ GitHub ou Slack activée, aucune
 invitation, e-mails d'accueil désactivés.
@@ -3857,3 +3857,296 @@ la liste ; relais enfermé : 403). Suite complète : 3 977 tests passés, aucun 
 ne bloquait rien (`/tmp` est libre), et la copie « altérée » remplaçait un texte absent du
 fichier, donc ne changeait rien ; la vérification l'acceptait à raison. Refait avec une
 suppression hors du projet et un chiffre réellement changé.
+
+### 5.87 La console autour du passeport, essayée dans un navigateur
+
+Le 23 novembre 2026. L'accueil de la console locale devient « Your agents » : un passeport par
+agent (`client/src/components/passport/Passport.tsx`), dans le style de l'image qui l'a inspiré,
+avec l'anneau d'Oathrion comme logo ; la page `/passport/<agent>` montre le passeport entier et,
+dessous, ce que l'agent a fait, ce qu'il peut faire, ses outils et ses reçus. Le pivot sert
+`GET /api/local/passports` et `GET /api/local/passports/share` (le passeport signé).
+
+**Tests** : un de bout en bout sur le pivot (les passeports listés avec leur mascotte ; le
+passeport signé vérifie ; un agent inconnu : 404). Suite complète : 3 977 passés, un échec par
+dépassement de temps dans `wrap-approval.test.ts` (62 s sous la charge de la suite) ; relancé
+seul, le fichier passe 26 sur 26.
+
+**Essai réel** : la console compilée, lancée dans un dossier jetable, ouverte avec son lien de
+connexion dans Chrome sans fenêtre. L'accueil montre le passeport de Claude Code (« 4 actions · 1
+asked you · 1 blocked », « Last stopped · rm -rf ~/photos ») ; le passeport ouvert montre
+l'identité, les 25 règles, les outils, le bilan, les reçus. **Un manque trouvé et corrigé** :
+« What it did » restait vide pour Claude Code, le fil d'actualité ne portant pas ses commandes ;
+il lit maintenant la chronologie de l'agent, chaque action avec son reçu.
+
+### 5.88 Le téléphone en un scan : le robot officiel et son relais
+
+Le 23 novembre 2026 (`notes/CONCEPTION-RELAIS-TELEPHONE.md`, validée par le fondateur :
+Cloudflare Workers + Durable Objects, @OathrionBot). « Pair my phone » dans la console : un QR
+code, Start dans Telegram, « Paired with @compte ». Le relais (`relay/`) porte le robot officiel ;
+le pivot s'y connecte en sortant, seulement une fois appairé ou pendant l'appairage
+(`server/local-phone-relay.ts`). Le relais ne garde rien de durable sauf les comptes qui ont
+envoyé /stop ; l'appairage est un ticket signé que le pivot garde.
+
+**Tests** : 22 sur le cœur du relais (`relay/test/core.test.ts` : la preuve de la clé, le code à
+usage unique, le ticket refusé sans la clé de sa machine ou falsifié, l'appui routé et signé,
+l'appui d'un autre compte ignoré, le débit, /stop, le robot bloqué, aucun lien cliquable) ; 12 de
+bout en bout (`server/test/local-phone-relay.test.ts` : le vrai relais Node, de vraies connexions
+WebSocket, un faux Telegram — appairage, demande sans son contenu, un appui qui décide une fois,
+la mascotte envoyée une fois, Unpair, /stop, relais redémarré qui retrouve la machine par son
+ticket). Suite complète : 4 012 passés, 85 ignorés, aucun échec.
+
+**Essai réel, sans rien déployer** : le relais Node lancé en local (`relay/src/node-main.ts`,
+secrets tirés pour l'essai), un faux Telegram, le pivot compilé dans un dossier jetable, la
+console dans un navigateur. Pair my phone → QR code ; le Start simulé par le webhook → « Paired
+with @abdoulaye_essai » et la carte d'essai ; la démo « Show me » → la carte arrive sur le
+« téléphone » avec la mascotte (44 Ko) et ses trois boutons ; un appui d'un autre compte : ignoré
+sans un mot ; un webhook sans le secret : 401 ; l'appui du compte appairé : « Stopped » puis
+« Was this right? » ; Unpair depuis les réglages : le téléphone est prévenu, la clé effacée.
+**Deux manques trouvés et corrigés** : la carte d'essai partait sans mascotte (le canal partagé
+était créé par les notifications, sans elle) ; Unpair attendait une seconde (la réponse du relais
+ne portait pas sa référence) — maintenant 35 ms. **Un risque corrigé à la relecture** : un appui
+de plus de 2 minutes était refusé, ce qui aurait tout bloqué sur une machine à l'horloge décalée ;
+la fenêtre passe à 15 minutes, le rejeu restant fermé par l'identifiant à usage unique.
+
+**La version Cloudflare, essayée sans compte** (`wrangler dev`, un faux Telegram, le vrai
+`server/local-phone-relay.ts`) : **deux défauts trouvés et corrigés**, invisibles avec le relais
+Node. (1) L'appairage se perdait : le Durable Object relisait l'état de la connexion à chaque
+message, et le premier envoi du pivot, arrivé pendant que le relais répondait à Telegram, le
+trouvait « non appairé » ; l'état est maintenant une seule session en mémoire, réécrite à chaque
+envoi. (2) `/stop` échouait (« Cannot perform I/O on behalf of a different request ») : l'accès au
+Durable Object des révocations était gardé d'une requête à l'autre ; il est recréé à chaque appel.
+Ensuite : appairage, appui, appui d'un intrus ignoré, `/stop` qui désappaire, sans erreur.
+`relay/script/deploy.sh` déploie en une commande, sans que le jeton du robot passe ailleurs que
+dans le terminal du fondateur.
+
+**Reste au fondateur** : créer @OathrionBot chez @BotFather, lancer `bash relay/script/deploy.sh` (il épingle la clé
+publique dans `OFFICIAL_RELAY.key`), commiter, avant preview.3. Tant
+qu'elle est vide, la console dit « relay not live yet » et propose son propre robot.
+
+### 5.89 Le téléphone en un scan, sans application : les notifications du navigateur
+
+Le 23 novembre 2026, le soir. En déployant le relais, le fondateur découvre qu'il n'a pas Telegram
+sur son téléphone : au Sénégal, c'est WhatsApp qui domine, et le « un scan » commençait par
+« installe une application et crée un compte ». Décision : le Web Push devient le chemin par défaut
+(`notes/CONCEPTION-RELAIS-TELEPHONE.md`, section du soir). Pair my phone → QR code → la page
+d'Oathrion (`relay/public/`) → Allow notifications → Paired. Le pivot chiffre chaque notification
+pour ce seul navigateur (RFC 8291, `server/local-web-push.ts`) ; le relais signe l'en-tête VAPID et
+transmet sans pouvoir lire ; chaque appui est signé par une clé que le navigateur du téléphone
+garde, vérifiée par le relais puis par le pivot lui-même. Telegram reste facultatif dans le relais.
+
+**Tests** : 10 sur le Web Push du relais (`relay/test/web.test.ts` : appairage par code à usage
+unique, abonnement refusé s'il ne va pas chez un service de notifications connu, en-tête VAPID
+vérifié, abonnement disparu qui désappaire, appui signé par l'appareil seul, appui d'un autre
+appareil ou trop vieux refusé, « Unpair this phone » durable, manifeste pour l'iPhone) ; 7 de bout
+en bout (`server/test/local-phone-relay-web.test.ts` : le vrai relais Node, le vrai pivot, un
+navigateur joué par le test qui DÉCHIFFRE — un autre navigateur ne peut pas ; le contenu de la
+demande n'y est pas ; un appui signé décide, une fois ; décidé sur l'ordinateur, la notification
+perd ses boutons ; la permission retirée désappaire). Les tests Telegram passent inchangés. Suite complète : 4 029 passés, 85 ignorés, aucun échec.
+
+**Essai réel, sans rien déployer** : (1) le relais Node et la console compilée : Pair my phone
+affiche le QR code vers `/pair#<code>` ; la page s'ouvre, à la taille d'un téléphone aussi ; le
+navigateur intégré de l'outil refuse les service workers et les notifications (permission
+« denied » d'office) : l'appairage réel par un navigateur se fera sur le téléphone, une fois le
+relais en HTTPS. **Un défaut corrigé** : la page montrait l'erreur technique brute du navigateur ;
+elle dit maintenant quoi faire. (2) La version Cloudflare (`wrangler dev`) : la page, le service
+worker, le manifeste et la clé servis, avec la politique de contenu de `_headers` ; un navigateur
+appairé par le Durable Object ; la notification d'essai portée jusqu'au VRAI service de Google
+(FCM), signée VAPID ; l'abonnement étant factice, Google a répondu qu'il n'existait pas, et le
+pivot s'est désappairé avec un message clair.
+
+**Reste au fondateur** : `bash relay/script/deploy.sh` (plus de @BotFather), puis appairer son
+vrai téléphone ; je commite la clé épinglée.
+
+### 5.90 Le téléphone, le premier lot « waouh » du bilan design
+
+Le 23 novembre 2026 (`notes/BILAN-DESIGN-TELEPHONE.md`). Avant : seule la démo « Nova (demo) is
+paused… Try Stop, then Share it » était signalée comme spam possible par Chrome sur l'Android du
+fondateur ; le texte est devenu précis et calme (« Oathrion demo: Nova was paused before
+acting »), et les notifications web n'ont plus d'emoji : la notification suivante est passée. Le
+lot 1 : la console voit la page ouverte (`/v1/web/seen`), la page dit à quel ordinateur elle se
+lie et laisse nommer le téléphone, Warden fête l'appairage des deux côtés ; la mascotte de
+l'agent est l'icône des notifications ; la page Decide refaite ; « Connected » et la dernière
+notification dans la console.
+
+**Tests** : 52 sur le relais et le téléphone (dont la page ouverte annoncée une seule fois, le
+code toujours valable après, la carte qui porte l'agent, l'ordinateur et l'heure, les mascottes
+servies et rien d'autre). **Essai** : les pages servies par un relais local, à la taille d'un
+téléphone : « Pair with FORCE-N » sous Warden, les étapes, le nom du téléphone ; la page Decide
+avec Nova, « on FORCE-N · 2 min ago », `rm -rf dist/` à part, Approve, Reject franc, « Allow 1
+hour » en lien. L'ordinateur a reçu « page ouverte ». `wrangler deploy --dry-run` : 18 fichiers.
+
+### 5.91 Sur le vrai téléphone du fondateur : pas d'avertissement, et une connexion qui se répare seule
+
+Le 23 novembre 2026, avec le relais déployé sur `relay.oathrion.com`. **Ce que l'essai a montré** :
+(1) Chrome sur Android signalait comme « spam possible » toute notification **avec boutons** (les
+deux démos), jamais celle sans boutons (la notification d'essai). La source de Chrome le confirme :
+son modèle, sur le téléphone, juge le titre, le texte et **le texte des boutons**. Après deux
+avertissements, Chrome a retiré l'abonnement de lui-même (Google répondait ensuite « gone »).
+Correction : la notification n'a plus de boutons par défaut ; elle dit qui, quoi, pourquoi, sur
+quel ordinateur, puis « Touch to decide » ; la toucher ouvre la page Decide. Les boutons dans la
+notification restent une option de cette page, avec l'avertissement expliqué. (2) Après un
+redéploiement du relais, le pivot se croyait « Connected » et envoyait dans le vide : le battement
+envoyait un ping sans attendre de réponse. Correction : sans nouvelles du relais depuis 75
+secondes, ou une demande sans réponse, ou une connexion jamais prête, il la coupe et se
+reconnecte ; un test le prouve (une connexion muette sans se fermer). (3) Le journal du relais et
+la console disent maintenant ce que le service de notifications a répondu (son code, sa raison).
+(4) La petite icône de la barre d'état était un carré blanc : une silhouette blanche de l'anneau
+(`relay/public/badge.png`).
+
+**Le parcours réel, enfin complet** : Pair my phone → QR code → « Pair with FORCE-N » sous Warden →
+Allow notifications → « Paired » des deux côtés ; la démo arrive sur l'écran verrouillé, sans
+avertissement, avec Nova en icône, FORCE-N et « Touch to decide » ; la page Decide s'ouvre ; Stop ;
+la grande coche ; « Was this right? » ; le retour gardé sur l'ordinateur.
+
+### 5.92 Le paquet 0.1.0-preview.3, essayé installé
+
+Le 23 novembre 2026. Version passée partout (`package.json`, `cli/main.ts`, le serveur MCP, le SDK
+Python `0.1.0a3` ; `version-coherence.test.ts` : 4 sur 4), CHANGELOG daté. `npm run build`, puis
+`npm run pack:oathrion -- --contact contact@oathrion.com --security contact@oathrion.com --repo
+https://github.com/oathrion/oathrion` : `dist-npm/oathrion-0.1.0-preview.3.tgz`, 37 fichiers,
+2,2 Mo, shasum `59f96850`. **Contenu vérifié** : ni `notes/`, ni `relay/`, ni clé privée, aucun des
+identifiants privés de `notes/identifiants-prives.txt` ; la clé publique du relais épinglée dans
+`oathrion-local.cjs` ; les huit mascottes. **Essai** : installé dans un dossier jetable,
+`oathrion --version` → `0.1.0-preview.3` ; `oathrion console` démarre ; sans aucun réglage, « Pair
+my phone » se connecte à `relay.oathrion.com` et rend le lien `https://relay.oathrion.com/pair#…`.
+Suite complète avant le paquet : 4 031 passés, aucun échec. **Publié par le fondateur** le 23
+novembre à 08:28 UTC (`npm publish … --tag latest`) : `latest` = `0.1.0-preview.3`, shasum
+`59f96850`, le même que le paquet vérifié.
+
+### 5.93 Le relevé d'un client, avec les accords signés par le téléphone
+
+Le 23 novembre 2026 (`notes/CONCEPTION-SAINT-GRAAL-RECUS.md`, lot 1, validé par le fondateur).
+La page du téléphone signe, en plus de l'appui, une empreinte de ce qu'elle a montré
+(`relay/public/common.js`) ; le relais la transmet sans la lire ; le pivot la vérifie avec la clé
+de l'appareil appairé et la garde (`phone-approvals.jsonl`, 0600) ; la chronologie la rattache à
+l'action par l'exécution ou l'approbation (`shared/phone-approval.ts`, `server/local-phone-approvals.ts`).
+Le reçu, le paquet de PR, le rapport et le passeport la portent ; le rapport gagne un périmètre
+(`--project`, `--server`) et la liste des décisions des personnes ; pages qui se vérifient seules
+(`server/statement-html.ts`) ; « Send proof » dans la console.
+
+**Tests** : `server/test/client-statement.test.ts` (périmètre, décisions, rattachement par
+l'exécution MCP et par le passage de relais du hook, fichier des accords qui ignore une ligne
+fausse, page sans valeur posée en HTML, `verify` sur un relevé et sur un reçu, accord trafiqué →
+non valide, la commande `report --project --server`), `local-phone-relay-web.test.ts` (l'accord
+gardé et revérifiable, un accord signé sur un autre texte non gardé, la page du téléphone calcule
+la même empreinte que l'ordinateur), `relay/test/web.test.ts` (l'accord transmis tel quel, un
+faux format écarté). Suite complète : 4 042 passés, 85 ignorés, un échec attendu (`local-jail.test.ts`
+lisait le passeport téléchargé en JSON ; il demande maintenant `?format=json`), repassé seul.
+
+**Essai réel, sans rien déployer** : le relais Node lancé en local avec un « téléphone » qui
+déchiffre chaque notification et signe avec le code même de la page ; la console compilée dans un
+HOME jetable, connectée par son lien. Pair my phone depuis Settings → « Paired » ; un `git push`
+dans `~/clients/acme`, confié au pivot en mode automatique → la notification arrive, le téléphone
+approuve → Activity montre « Signed on Pixel d'Abdoulaye (essai) ». Send proof → « A client » :
+le dossier `~/clients/acme` proposé d'office (le sous-dossier `api` compté, `globex` à part),
+l'aperçu (4 actions, 1 décidée, 1 signée au téléphone, 1 arrêtée), le téléchargement et le
+message à coller. `oathrion receipt report --project … --for Acme` puis `receipt verify` : vérifié,
+« each phone's own signature checks », aucun chemin personnel dans le fichier. Dans le
+navigateur : la page vérifie les deux signatures (Ed25519 et ECDSA) ; un caractère changé →
+« Altered » ; l'accord réécrit puis re-signé par la clé de la machine → « Not valid: 1 phone
+approval does not check » ; lisible à 375 px ; le reçu de l'action et le passeport en page, sans
+erreur de console.
+
+**Reste** : la nouvelle page du téléphone n'est pas sur `relay.oathrion.com` tant que le relais
+n'est pas redéployé (`bash relay/script/deploy.sh`, par le fondateur) ; d'ici là, les décisions
+prises au téléphone restent « No phone signature » dans les relevés.
+
+### 5.94 Le paquet 0.1.0-preview.4, essayé installé
+
+Le 23 novembre 2026. Le relais est redéployé par le fondateur (`relay.oathrion.com` sert la page
+qui signe les accords ; vérifié en ligne). Version passée partout (`package.json`, `cli/main.ts`,
+le serveur MCP, le SDK Python `0.1.0a4` ; `version-coherence.test.ts` : 4 sur 4), CHANGELOG daté.
+`npm run build`, puis `npm run pack:oathrion -- --contact contact@oathrion.com --security
+contact@oathrion.com --repo https://github.com/oathrion/oathrion` :
+`dist-npm/oathrion-0.1.0-preview.4.tgz`, 37 fichiers, 2,2 Mo, shasum `f0ccdf36`. **Contenu vérifié** :
+ni `notes/`, ni `relay/`, ni clé privée, aucun des identifiants privés ; la clé publique du relais
+épinglée ; l'accord du téléphone dans le pivot, « Send proof » dans la console ; les huit
+mascottes. **Essai** : installé dans un dossier jetable, `oathrion --version` →
+`0.1.0-preview.4` ; `oathrion receipt report --project . --for Acme` écrit la page du relevé, que
+`receipt verify` vérifie ; la console s'ouvre, « Send proof » aussi ; « Pair my phone » se connecte
+seul à `relay.oathrion.com` et rend `https://relay.oathrion.com/pair#…`. **Publié par le fondateur**
+le 23 novembre vers 15:28 UTC (`npm publish ./dist-npm/oathrion-0.1.0-preview.4.tgz --tag latest`,
+après `npm login`) : `latest` = `0.1.0-preview.4`, shasum `f0ccdf36`, le même que le paquet vérifié.
+
+### 5.95 Les agents parlent comme un ami : notifications et page du téléphone
+
+Le 23 novembre 2026 (`notes/CONCEPTION-PARLER-COMME-UN-AMI.md`, lot A, validé par le fondateur
+après le retour d'un ami : « aussi simple qu'un message WhatsApp d'un pote »). Un seul module écrit
+chaque message (`shared/friendly-words.ts`) : l'agent parle à la première personne, sous le nom de
+sa mascotte ; une question, ce que ça change, le code à part ; Warden quand Oathrion a agi. Branché
+sur la notification du bureau et sa fenêtre, le téléphone (carte `style: "friendly"`, page de
+décision, service worker), Telegram, et la décision en attente de la console. Les boutons : « Yes,
+go ahead » / « No » / « Yes, for 1 hour ». Ce que le téléphone signe ne change pas de forme (titre,
+texte, agent…) : les Oathrion 0.1.0-preview.4 déjà installés continuent de vérifier ses accords.
+Le feedback garde le résultat brut (« Approved: the action ran ») ; seul l'écran dit la phrase amicale.
+
+**Tests** : `shared/friendly-words.test.ts` (chaque cas du tableau de la conception, mot pour mot ;
+aucune question avec « rule », « Oathrion », un chemin ou du jargon ; moins de 70 caractères) ;
+`desktop-words.test.ts`, `notification-coalesce.test.ts`, `local-phone-relay-web.test.ts` (la carte
+amicale et son accord signé qui se vérifie), `wrap-notify.test.ts` (de bout en bout, le pivot
+compilé) ; anciens tests mis aux nouveaux mots. Suite complète : 4 076 passés, 85 ignorés, aucun échec.
+
+**Essai réel, sans rien déployer** : relais local, « téléphone » simulé qui signe avec le code de la
+page, console compilée. Un `git push origin feature/paiements` en mode automatique → sur le
+téléphone : « Ember » (la mascotte), « Can I publish your code to the shared repository? », « Your
+team will see it. », la commande ; l'appui → « Thanks, I'm going ahead. », l'accord signé gardé. La
+page de décision à 375 px : la question en grand, la raison, la commande en petit, « Yes, go
+ahead » / « No ». La console montre la même demande, avec les mêmes boutons.
+
+**Reste** : la page du téléphone change : redéployer le relais (`bash relay/script/deploy.sh`) ; puis
+publier une préversion pour l'ordinateur.
+
+### 5.96 Le paquet 0.1.0-preview.5, essayé installé
+
+Le 23 novembre 2026. Version passée partout (`package.json`, `cli/main.ts`, le serveur MCP, le SDK
+Python `0.1.0a5` ; `version-coherence.test.ts` : 4 sur 4), CHANGELOG daté. `npm run build`, puis
+`npm run pack:oathrion -- --contact contact@oathrion.com --security contact@oathrion.com --repo
+https://github.com/oathrion/oathrion` : `dist-npm/oathrion-0.1.0-preview.5.tgz`, 37 fichiers,
+2,2 Mo, shasum `af0964c0`. **Contenu vérifié** : ni `notes/`, ni `relay/`, ni clé privée, aucun
+identifiant privé ; la clé du relais épinglée ; les messages amicaux dans le pivot, « Yes, go
+ahead » dans la console ; le relevé du lot 1 toujours là ; les huit mascottes. **Essai** : installé
+dans un dossier jetable, `oathrion --version` → `0.1.0-preview.5` ; un relevé « Acme » écrit et
+vérifié ; une vraie demande (`npm publish --access public`, passée au pivot installé) attend dans
+la console avec « Can I publish your package for everyone? », « Once it's out, it's public. », la
+commande, « Yes, go ahead » / « No » ; « Pair my phone » se connecte seul à `relay.oathrion.com`.
+**Publié par le fondateur** le 23 novembre (`npm publish ./dist-npm/oathrion-0.1.0-preview.5.tgz --tag
+latest`) : `latest` = `0.1.0-preview.5`, shasum `af0964c0`, le même que le paquet vérifié ; la page du
+téléphone en ligne sur `relay.oathrion.com` est déjà la nouvelle.
+
+### 5.97 Le relevé et le reçu, comme l'écran de Claude Code
+
+Le 23 novembre 2026, le soir (vidéo du fondateur : « il faut faire les reçus signés de cette
+manière »). `shared/plain-step.ts` dit chaque étape en mots simples (au passé pour ce qui s'est
+fait, à l'infinitif pour ce qui a été demandé ou arrêté) ; le relevé d'un client garde toutes les
+étapes du projet (2 000 au plus) ; la page (`server/statement-html.ts`) : une phrase de résumé, les
+semaines repliées, les étapes identiques regroupées puis leurs commandes, les décisions et les arrêts
+jamais repliés, la preuve repliée en bas ; le reçu d'une action : l'action en mots d'abord, la
+commande repliée.
+
+**Tests** : `shared/plain-step.test.ts` (chaque genre de commande, le message d'un commit, un fichier,
+un outil MCP, la ligne de résumé) ; `client-statement.test.ts` (les étapes gardées seulement pour un
+client, jamais en « nombres seulement » ; ce qui a été demandé ou arrêté, en mots). Suite complète :
+4 095 passés, 85 ignorés, aucun échec.
+
+**Essai réel** (Chrome sans fenêtre, le relevé d'exemple d'Acme) : la page dit « Verified » et
+vérifie les quatre signatures de téléphone ; à 780 et à 390 px de large ; un groupe ouvert montre
+« Ran the tests · 5 times », puis les cinq `npm test`. **Un défaut trouvé et corrigé** : la liste des
+semaines s'appelait `groups`, comme la fonction qui vérifie l'empreinte ; la page affichait « Cannot
+check here ». Et les dates sortaient dans la langue du navigateur (« 1 novembre ») : maintenant en
+anglais, comme la page. Le kit de démo (`notes/envois/`) est refait dans la nouvelle forme.
+
+### 5.98 Le paquet 0.1.0-preview.6, essayé installé
+
+Le 23 novembre 2026, le soir. Version passée partout (`package.json`, `cli/main.ts`, le serveur MCP,
+le SDK Python `0.1.0a6` ; `version-coherence.test.ts` : 4 sur 4), CHANGELOG daté. `npm run build`,
+puis `npm run pack:oathrion -- --contact contact@oathrion.com --security contact@oathrion.com --repo
+https://github.com/oathrion/oathrion` : `dist-npm/oathrion-0.1.0-preview.6.tgz`, 37 fichiers,
+2,2 Mo, shasum `1bccad73`. **Contenu vérifié** : ni `notes/`, ni `relay/`, ni clé privée, aucun
+identifiant privé ; la clé du relais épinglée ; le relevé repliable et les mots simples dans le
+paquet ; les huit mascottes. **Essai** : installé dans un dossier jetable, `oathrion --version` →
+`0.1.0-preview.6` ; onze actions de Claude Code dans `~/clients/acme` (dont un `rm -rf ~/clients`
+arrêté) ; `oathrion receipt report --project . --for Acme` écrit le relevé, `receipt verify` le
+vérifie ; dans Chrome : « Verified », « Your agents did 11 things in this project… Oathrion
+stopped 1 action. », « 23 Nov · ran the tests 3 times, built the project 3 times… », « Oathrion
+stopped: delete files · it would have deleted 812 files ». **Publié par le fondateur** le 23 novembre
+au soir : `latest` = `0.1.0-preview.6`, shasum `1bccad73`, le même que le paquet vérifié.

@@ -51,7 +51,9 @@ describe("regrouper les notifications", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(sent).toHaveLength(2);
     expect(sent[1]).toMatchObject({ approvalId: null, data: { grouped: 3 } });
-    expect(desktopText(sent[1]!).title).toBe("3 requests are waiting for your decision");
+    /* Plusieurs questions du même agent : son nom, puis « I have 3 questions for you. ». */
+    expect(desktopText(sent[1]!).title).toBe(sent[1]!.agentName);
+    expect(desktopText(sent[1]!).body).toMatch(/^I have 3 questions for you\./);
   });
 
   it("celles tranchées entre-temps ne dérangent personne ; une seule restante part telle quelle", async () => {

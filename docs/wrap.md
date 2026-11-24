@@ -259,8 +259,19 @@ a request, a more urgent one when something read a decoy or an agent was paused.
 
 #### Approving from your phone, anywhere
 
-Leave your computer at home, and decide from your phone. Requests arrive on **Telegram**, with
-the agent's mascot and **Approve** / **Reject**:
+Leave your computer at home, and decide from your phone.
+
+**In one scan, with no app.** In the console, « Pair my phone » shows a QR code; your phone's
+camera opens Oathrion's page; tap Allow. Your agents' requests then reach your phone as
+notifications; tapping one opens the page where you decide (on iPhone, add the page to your
+home screen first). Each notification is encrypted on your computer for your phone alone, and
+Oathrion's relay (`relay/`, open source) only passes it on. Your phone signs each answer with
+a key its browser keeps and never shares, so an agent on your computer cannot fake it: each
+decision then shows « Signed on <your phone> ». Self-hosting the relay:
+`OATHRION_PHONE_RELAY_URL` and `OATHRION_PHONE_RELAY_KEY`.
+
+**Or with your own Telegram bot.** Requests arrive on **Telegram**, with the agent's mascot and
+**Approve** / **Reject**:
 
 1. In Telegram, open **@BotFather**, send `/newbot`, pick a name. It gives you a token. Use a
    new bot for Oathrion: it should serve nothing else.

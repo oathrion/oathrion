@@ -12,6 +12,7 @@ import { AppShell } from "@/components/layout/AppShell";
 
 import DashboardPage from "@/pages/dashboard";
 import HomePage from "@/pages/home";
+import PassportPage from "@/pages/passport";
 import SharePage from "@/pages/share";
 import DecidePage from "@/pages/decide";
 import LocalSettingsPage from "@/pages/local-settings";
@@ -87,6 +88,7 @@ function AppRouter() {
       <Route path="/" component={HomeRedirect} />
       <Route path="/onboarding" component={OnboardingPage} />
       <Route path="/home" component={HomePage} />
+      <Route path="/passport/:agent" component={PassportPage} />
       <Route path="/share" component={SharePage} />
       <Route path="/decide" component={DecidePage} />
       <Route path="/dashboard" component={DashboardOrHome} />

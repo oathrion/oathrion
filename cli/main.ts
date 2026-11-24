@@ -48,7 +48,7 @@ export interface Io {
 }
 
 /* La version du produit (`package.json`) ; `version-coherence.test.ts` refuse qu'elle diverge. */
-export const VERSION = "0.1.0-preview.2";
+export const VERSION = "0.1.0-preview.6";
 
 const HELP = `Oathrion — runtime authorization for AI agents.
 
@@ -63,7 +63,7 @@ PUT OATHRION IN FRONT OF YOUR AGENTS' MCP SERVERS
                                   pretend agent: nothing real is paused.
   oathrion console                Open the local console, already signed in.
   oathrion phone telegram         Approve from your phone, anywhere: requests arrive
-                                  on Telegram with Approve and Reject.
+                                  on Telegram: you answer yes or no.
   oathrion decoys plant           Plant fake secrets: one in what your agent sends,
                                   and Oathrion refuses it.
   oathrion wrap -- <command>      Govern one MCP server (what the clients run).

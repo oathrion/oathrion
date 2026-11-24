@@ -28,6 +28,8 @@ export default defineConfig({
       // product’s: a wrapped tool must not run without an ALLOW. Untested
       // example code that people copy is worse than no example at all.
       "examples/**/*.test.ts",
+      // Le relais du téléphone (`relay/`) : il porte les décisions prises sur le téléphone.
+      "relay/test/**/*.test.ts",
     ],
     setupFiles: ["server/test/setup.ts"],
     // The integration suite shares one SQLite file; run suites serially.

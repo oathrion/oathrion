@@ -32,6 +32,22 @@
   unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 @font-face {
+  font-family: "Exo 2";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./fonts/exo-2-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+@font-face {
+  font-family: "Exo 2";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./fonts/exo-2-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
   font-family: "Source Code Pro";
   font-style: normal;
   font-display: swap;
@@ -434,3 +450,88 @@ h1 { font-family: var(--font-serif); font-weight: 500; }
 @media (prefers-reduced-motion: reduce) {
   .receipt-print, .receipt-stamp { animation: none; }
 }
+
+/*
+ * LE STYLE PASSEPORT (23 novembre, `notes/CONSTRUCTION-CONSOLE-PASSEPORT.md`) : la console locale
+ * tourne autour du passeport de chaque agent, dans le style de l'image qui l'a inspiré — bleu
+ * nuit, verre, lueurs violettes et cyan, Exo 2. `.passport` est posé sur la coque en mode local :
+ * les couleurs de tous les écrans suivent, les composants du passeport ont leurs classes `ap-*`.
+ */
+.passport {
+  --background: 236 62% 5%;
+  --foreground: 232 100% 97%;
+  --border: 234 42% 26%;
+  --card: 236 52% 11%;
+  --card-foreground: 232 100% 97%;
+  --card-border: 236 50% 30%;
+  --sidebar: 236 60% 7%;
+  --sidebar-foreground: 232 100% 97%;
+  --sidebar-border: 234 42% 22%;
+  --sidebar-primary: 252 100% 78%;
+  --sidebar-primary-foreground: 236 62% 5%;
+  --sidebar-accent: 244 48% 22%;
+  --sidebar-accent-foreground: 232 100% 97%;
+  --sidebar-ring: 252 100% 75%;
+  --popover: 236 52% 10%;
+  --popover-foreground: 232 100% 97%;
+  --popover-border: 236 50% 30%;
+  --primary: 252 100% 68%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 236 42% 17%;
+  --secondary-foreground: 232 100% 97%;
+  --muted: 236 42% 15%;
+  --muted-foreground: 233 55% 84%;
+  --accent: 240 45% 20%;
+  --accent-foreground: 232 100% 97%;
+  --input: 234 42% 30%;
+  --ring: 252 100% 75%;
+  --font-sans: "Exo 2", "Source Sans 3", system-ui, sans-serif;
+  --font-serif: "Exo 2", "Source Sans 3", system-ui, sans-serif;
+  background: radial-gradient(ellipse 55% 40% at 60% 12%, #0e0f38 0%, #06071c 55%, #02030a 100%);
+  font-family: var(--font-sans);
+}
+.passport-beams { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.passport-beams::before, .passport-beams::after { content: ""; position: absolute; top: -140px; width: 240px; height: 760px; filter: blur(28px); }
+.passport-beams::before { left: -60px; background: linear-gradient(180deg, rgba(120, 80, 255, 0.40), rgba(80, 50, 200, 0)); transform: rotate(24deg); }
+.passport-beams::after { right: -40px; background: linear-gradient(180deg, rgba(60, 120, 255, 0.42), rgba(40, 90, 220, 0)); transform: rotate(-24deg); }
+
+/* La carte de verre du passeport : le violet à gauche, le cyan à droite, un reflet en diagonale. */
+.ap-card {
+  position: relative;
+  background: linear-gradient(165deg, rgba(70, 56, 180, 0.42) 0%, rgba(28, 28, 96, 0.44) 35%, rgba(12, 16, 60, 0.56) 70%, rgba(14, 50, 110, 0.5) 100%);
+  border: 2px solid;
+  border-color: rgba(175, 155, 255, 0.85) #7ae8ff rgba(110, 150, 255, 0.75) rgba(150, 115, 255, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(120, 220, 255, 0.18), inset 0 2px 46px rgba(150, 120, 255, 0.2), inset -16px 0 50px rgba(60, 200, 255, 0.2),
+    0 0 20px rgba(130, 100, 255, 0.7), -6px 0 36px rgba(120, 80, 255, 0.4), 12px 0 40px rgba(50, 210, 255, 0.55);
+}
+.ap-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 28%, rgba(255, 255, 255, 0) 70%, rgba(110, 220, 255, 0.1) 100%);
+  pointer-events: none;
+}
+.ap-soft {
+  background: linear-gradient(160deg, rgba(60, 50, 160, 0.3), rgba(14, 18, 60, 0.55));
+  border: 1.5px solid rgba(150, 160, 255, 0.45);
+  box-shadow: inset 0 1px 20px rgba(140, 120, 255, 0.12), 0 0 18px rgba(110, 90, 255, 0.3);
+}
+.ap-wait { border-color: rgba(63, 227, 200, 0.8); box-shadow: 0 0 24px rgba(63, 227, 200, 0.35), inset 0 0 20px rgba(63, 227, 200, 0.1); }
+.ap-tile {
+  background: linear-gradient(135deg, rgba(84, 96, 196, 0.4), rgba(34, 42, 110, 0.55));
+  border: 1px solid rgba(150, 170, 255, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+.ap-stop { border-color: rgba(255, 154, 82, 0.55); background: linear-gradient(135deg, rgba(110, 50, 30, 0.3), rgba(34, 30, 70, 0.55)); }
+.ap-grad { background: linear-gradient(90deg, #c98dff, #a68cff 50%, #8ea2ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.ap-ring { background: conic-gradient(from 200deg, #7c5cff, #4fd8ff, #9b7bff, #4fd8ff, #7c5cff); box-shadow: 0 0 18px rgba(90, 170, 255, 0.7), 0 0 40px rgba(110, 90, 255, 0.35); }
+.ap-ring-inner { background: radial-gradient(circle at 50% 42%, #2a2a88 0%, #121350 55%, #080a2c 100%); }
+.ap-btn { background: linear-gradient(90deg, #7a5cff, #4a8cff); box-shadow: 0 0 18px rgba(110, 110, 255, 0.6); color: #fff; }
+.ap-btn:hover { filter: brightness(1.1); }
+.ap-ghost { border: 1px solid rgba(150, 170, 255, 0.5); background: rgba(20, 24, 70, 0.5); color: #fff; }
+.ap-ghost:hover { background: rgba(40, 46, 110, 0.6); }
+.ap-signed { background: rgba(12, 36, 58, 0.55); border: 1.5px solid #3fe3c8; box-shadow: 0 0 12px rgba(63, 227, 200, 0.5); }
+.ap-logo { filter: drop-shadow(0 0 10px rgba(140, 120, 255, 0.85)); }
+.ap-bar { background: linear-gradient(90deg, #3a5bff, #2fc8ff 70%, #9a7bff); box-shadow: 0 0 10px rgba(70, 200, 255, 0.9); }
+.ap-nopass { border: 2px dashed rgba(255, 154, 82, 0.7); background: linear-gradient(165deg, rgba(90, 40, 30, 0.22), rgba(20, 16, 40, 0.45)); box-shadow: 0 0 26px rgba(255, 140, 60, 0.22); }

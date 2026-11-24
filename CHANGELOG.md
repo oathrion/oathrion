@@ -6,6 +6,95 @@ compatibility, and the entry says so.
 
 ## [Unreleased]
 
+- **The limits page says what is true today.** `docs/not-yet.md` still said that you could not
+  approve from your phone and that receipts carried no signature: both changed in preview.3
+  and preview.4. It now says what a signed receipt proves and what it does not (who held the
+  key), what the phone needs (your computer on and online), that an agent on your computer
+  cannot make your phone's signature, and what runs on macOS and Windows at every change. The
+  README and `docs/wrap.md` describe pairing your phone in one scan, not only Telegram.
+
+## [0.1.0-preview.6] — 2026-11-23
+
+- **Statements and receipts read like a conversation, not a log.** A client's statement now
+  opens with one sentence (« Your agents did 129 things in this project, from 1 to 23 November.
+  A person decided 4 times, each on their phone. Oathrion stopped 2 actions. »), then the work
+  week by week, folded: « 3 Nov – 7 Nov · ran the tests 5 times, changed 8 files… ». Unfold a
+  week and each kind of step is one line in plain words (« Ran the tests · 5 times »); unfold it
+  for the exact commands. What matters is never folded: each decision a person made, with their
+  phone's signature, and each action Oathrion stopped. The proof is at the bottom, under « How do
+  I know this is true? ». A receipt says the action in words first (« Publish the code to the
+  shared repository »), with the command under « Show the exact command ». Dates are in English,
+  like the page, and the seal now shows when printed.
+
+## [0.1.0-preview.5] — 2026-11-23
+
+- **Your agents now ask like a friend would.** A request reads like a message from your agent,
+  under the name and face you gave it: « elias — Can I publish your code to the shared
+  repository? Your team will see it. », with the exact command underneath. No rule names, no
+  « Why: Oathrion: … ». The buttons answer the question: « Yes, go ahead » and « No » (and « Yes,
+  for 1 hour »), and after your answer the agent replies: « Thanks, I'm going ahead. » or « OK, I
+  won't do it. ». Several questions at once: « I have 3 questions for you. ». When Oathrion acted
+  itself (it paused an agent started without it, something read a fake password, a program it has
+  never seen), Warden says so in plain words. The same words everywhere: the notification on your
+  computer, the one on your phone and its page (the question, what it changes, then the command),
+  and the request waiting in the console. What is kept (your « Was this right? » answers, the
+  phone's signed approval) does not change.
+
+## [0.1.0-preview.4] — 2026-11-23
+
+- **Send proof to a client: a statement that checks itself, with each decision signed on the
+  person's own phone.** « Send proof » on Home and on each passport asks who it is for. « A
+  client »: choose the project folder (and the MCP servers) you worked on for them and a period;
+  the preview shows exactly what will be in it; download a page that checks its own signatures
+  in any browser, offline, and a message ready to paste. It lists what your agents did there,
+  each decision a person made, and what Oathrion stopped (« would have deleted 49 files »).
+  Paths are written « . » and « ~ », and secrets in commands are masked before signing. « A
+  reviewer »: the branch receipt for the pull request. From a terminal: `oathrion receipt report
+  --project <folder> [--server <name>] --for <client>`.
+- **A decision made on your phone now carries your phone's own signature.** The phone's page
+  signs what it showed you (the agent, the computer, the title and the reason) with a key its
+  browser keeps; your computer checks it and keeps it. Receipts, branch receipts, statements and
+  passports carry it, and `oathrion receipt verify` and the pages check both signatures: if the
+  approval inside a signed document does not check, the whole document is « Not valid ». It is
+  the one proof your computer cannot make alone: it says a paired phone gave this answer to this
+  text, not who held the phone. Activity shows « Signed on <your phone> », or « No phone
+  signature ». Needs the relay's new page (the phone's page signs the approval).
+- **Passports download as a page** that checks itself, instead of JSON (`?format=json` still
+  gives the JSON).
+
+## [0.1.0-preview.3] — 2026-11-23
+
+- **Pair your phone in one scan, with no app.** In the console, « Approve from your phone » →
+  Pair my phone shows a QR code; your phone's camera opens Oathrion's page; tap Allow
+  notifications, and the console says « Paired ». No app to install, no account, nothing to copy.
+  Your agents' requests then reach your phone as notifications, with Approve and Reject, wherever
+  you are (on iPhone, add the page to your home screen first). Each notification is encrypted on
+  your computer for your phone alone: Oathrion's relay (`relay/`, open source) passes it on
+  without being able to read it, and keeps nothing but revocations. Each press is signed by a key
+  your phone's browser keeps; your computer checks it, and a press decides once. Unpair in the
+  console, or « Unpair this phone » on the page. Telegram still works: your own bot (« Use your
+  own Telegram bot instead », `oathrion phone telegram`), or an official bot the relay can carry.
+  Self-hosting the relay: `OATHRION_PHONE_RELAY_URL` and `OATHRION_PHONE_RELAY_KEY`.
+  The two screens answer each other: the console shows the moment your phone opens the page,
+  and the page says which computer it pairs with (you name your phone there). Each notification
+  carries the agent's mascot, the computer it comes from and its own vibration; touching it
+  opens a decision page in the passport style — who asks, the command on its own line, why,
+  Approve first, Reject plainly, « Allow 1 hour » apart — then « Was this right? ». Once
+  paired, the console shows Warden, « Connected » and the last notification. Notifications
+  have no buttons by default — Chrome on Android flags notifications with buttons as possible
+  spam — and touching one opens the decision page; buttons in the notification are an option
+  there. A connection to the relay that goes silent is noticed within 75 seconds and remade.
+
+- **The console is built around each agent's passport.** On your machine, Home is now
+  « Your agents »: one passport per agent, in glass and light, with Oathrion's ring, the agent's
+  mascot and name, what it did over 7 days (what went through, asked you, was blocked), and the
+  last action Oathrion stopped. A decision that waits shows on top, with « Allow once » and
+  « Stop ». « Open passport » shows the whole passport — identity, permissions, tools, record,
+  protected since, audit trail — and, under it, what this agent did, what it may do, its tools
+  and its receipts. « Share passport » downloads it signed, for `oathrion receipt verify`. The menu
+  is now Passports, Decisions, This machine and Send feedback; the other pages are under
+  « Details ». The local console is dark only, and its font (Exo 2) ships with Oathrion.
+
 ## [0.1.0-preview.2] — 2026-11-23
 
 - **An agent's passport, signed.** `oathrion receipt passport --agent "Claude Code"` signs who an

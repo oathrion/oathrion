@@ -242,8 +242,11 @@ async function spawnHub(env: NodeJS.ProcessEnv, dir: string, secret: string, opt
   if (!port) throw new Error(`Port ${String(options.port)} is already taken.`);
   writeFileSync(join(dir, "port"), String(port), { mode: 0o600 });
 
-  /* L'environnement du pivot : le strict nécessaire. Les jetons de la personne vont à chaque serveur, par son relais. */
-  const knobs = Object.fromEntries(Object.entries(env).filter(([key]) => key.startsWith("OATHRION_LOCAL_HUB_") || key.startsWith("OATHRION_LOCAL_NOTIFY_") || key.startsWith("OATHRION_LOCAL_AGENT_")));
+  /*
+   * L'environnement du pivot : le strict nécessaire. Les jetons de la personne vont à chaque serveur, par son relais.
+   * `OATHRION_PHONE_RELAY_*` : qui héberge son propre relais du téléphone (`server/local-phone-relay.ts`).
+   */
+  const knobs = Object.fromEntries(Object.entries(env).filter(([key]) => key.startsWith("OATHRION_LOCAL_HUB_") || key.startsWith("OATHRION_LOCAL_NOTIFY_") || key.startsWith("OATHRION_LOCAL_AGENT_") || key.startsWith("OATHRION_PHONE_RELAY_")));
   /* La session graphique : sans elle, la notification de bureau ne peut rien afficher. */
   const desktopSession = Object.fromEntries(
     /* XAUTHORITY : sous Wayland, la clé d'XWayland, où s'ouvre la fenêtre de notification d'Oathrion (essai réel du 11 novembre). */

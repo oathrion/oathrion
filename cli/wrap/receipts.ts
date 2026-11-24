@@ -13,6 +13,7 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+import { choiceLabel, verifyPhoneApproval, type PhoneApproval } from "@shared/phone-approval";
 import { BUNDLE_TYPE, PASSPORT_TYPE, REPORT_TYPE, extractShared, verifyShared, type SharedReceipt, type Signed } from "@shared/receipt-share";
 
 import type { BundleStatement } from "../../server/local-bundle";
@@ -208,7 +209,8 @@ export function runReceipt(argv: readonly string[], out: (l: string) => void, er
       const bundle = shared as Signed<BundleStatement>;
       const pinned = trusted.length === 0 ? null : check.ok && trusted.includes(check.fingerprint.replace(/\s+/g, "").toLowerCase());
       const coverage = github && check.ok ? commitsAfter(bundle.statement.scope.head, context) : null;
-      const verdict = bundleVerdict(check, pinned, coverage);
+      const badPhones = bundle.statement.actions.filter((action) => action.approval && !verifyPhoneApproval(action.approval).ok).length;
+      const verdict = bundleVerdict(check, pinned, coverage, badPhones);
       for (const line of bundleLines(bundle, check, verdict)) out(line);
       if (github) reports.push(bundleMarkdown(bundle, check, verdict, pinned, coverage, file));
       if (!verdict.ok) code = Math.max(code, 1);
@@ -218,7 +220,7 @@ export function runReceipt(argv: readonly string[], out: (l: string) => void, er
       const pinned = trusted.length === 0 ? null : check.ok && trusted.includes(check.fingerprint.replace(/\s+/g, "").toLowerCase());
       const lines = statement.type === REPORT_TYPE ? reportLines(shared as Signed<ReportStatement>, check, pinned) : passportLines(shared as Signed<PassportStatement>, check, pinned);
       for (const line of lines) out(line);
-      if (!check.ok || pinned === false) code = Math.max(code, 1);
+      if (!check.ok || pinned === false || lines[0]?.startsWith("✗")) code = Math.max(code, 1);
       continue;
     }
     if (!check.ok) {
@@ -226,10 +228,17 @@ export function runReceipt(argv: readonly string[], out: (l: string) => void, er
       code = Math.max(code, 1);
       continue;
     }
-    const { action, issuer, issuedAt } = (shared as SharedReceipt).statement;
+    const { action, issuer, issuedAt, approval } = (shared as SharedReceipt).statement;
+    const phone = approval ? phoneLine(approval) : null;
+    if (phone && !phone.ok) {
+      out(`✗ NOT VALID: the receipt is signed, but the phone's approval inside it is not (${phone.line}).`);
+      code = Math.max(code, 1);
+      continue;
+    }
     out("✓ Verified: not a single character has changed since this receipt was signed.");
     out(`  ${action.agent} · ${action.what}`);
     out(`  ${action.outcomeLabel}${action.impact ? ` — would have deleted ${action.impact}` : ""} · ${action.at}`);
+    if (phone) out(`  ${phone.line}`);
     out(`  Signed by ${issuer.name} on ${issuedAt}`);
     out(`  Fingerprint: ${check.fingerprint}`);
   }
@@ -248,4 +257,14 @@ function commitsAfter(head: string | null, context: ReceiptContext): { after: nu
   /* Le commit qui ajoute le reçu lui-même ne compte pas : seuls ceux qui changent autre chose. */
   const count = Number(git(["rev-list", "--count", `${head}..HEAD`, "--", ".", ":(exclude).oathrion/receipts"], cwd).out);
   return { after: Number.isFinite(count) ? count : 0, ancestor };
+}
+
+/** L'accord d'un téléphone, revérifié avec sa seule clé : ce que la ligne dit, et s'il tient. */
+export function phoneLine(approval: PhoneApproval): { ok: boolean; line: string } {
+  const check = verifyPhoneApproval(approval);
+  if (!check.ok) return { ok: false, line: check.reason };
+  return {
+    ok: true,
+    line: `📱 ${choiceLabel(approval.choice)} on ${approval.device.label || "a paired phone"} (key ${approval.device.fingerprint.slice(0, 9)}…), on ${new Date(approval.at).toISOString()}: the phone's own signature checks. It showed: "${approval.shown.title}"`,
+  };
 }

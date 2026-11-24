@@ -25,6 +25,7 @@ import { readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import type { NotificationWords } from "@shared/approval-text";
+import { FRIENDLY_BUTTONS, friendlyDone, friendlyGrouped, friendlySender, wardenUnknownProgram, type FriendlyAsk } from "@shared/friendly-words";
 import { SHARE_NETWORKS, type ShareNetwork } from "@shared/share";
 
 import { passable } from "../local-hour-passes";
@@ -138,6 +139,52 @@ function wordsOf(event: NotificationEvent): NotificationWords | null {
 }
 
 /**
+ * La demande dite par l'agent comme un ami (`shared/friendly-words.ts`) : qui écrit (le nom de sa
+ * mascotte), la question, ce que ça change, le code. Null pour ce qui n'est pas une demande.
+ */
+export function friendlyOf(event: NotificationEvent): (FriendlyAsk & { sender: string }) | null {
+  if (event.type !== "approval.requested" || typeof event.data.grouped === "number") return null;
+  const friendly = (event.data.words as { friendly?: Partial<FriendlyAsk> } | undefined)?.friendly;
+  if (!friendly || typeof friendly.ask !== "string") return null;
+  const mascot = event.data.mascot as { name?: unknown } | undefined;
+  const text = (value: unknown) => (typeof value === "string" && value.trim() !== "" ? value : null);
+  return { sender: friendlySender(event.agentName, text(mascot?.name)), ask: friendly.ask, why: text(friendly.why), code: text(friendly.code), where: text(friendly.where) };
+}
+
+/** Ce que l'agent montre de son code : la commande toujours, ce qu'un outil recevra seulement sur l'ordinateur (privé). */
+function codeLine(friendly: FriendlyAsk, content: boolean): string | null {
+  if (!friendly.code) return null;
+  const command = friendly.where === null;
+  if (!command && !content) return friendly.where ? `on ${friendly.where}` : null;
+  const code = friendly.code.length > 160 ? `${friendly.code.slice(0, 157)}…` : friendly.code;
+  return friendly.where ? `on ${friendly.where}: ${code}` : code;
+}
+
+/**
+ * Le texte du téléphone, pour une demande dite comme un ami : la question en titre, ce que ça
+ * change puis le code dans le texte, séparés par une ligne vide (la page de décision les met en
+ * forme). Ce sont exactement le titre et le texte que le téléphone signe (`shared/phone-approval.ts`).
+ */
+export function phoneFriendly(event: NotificationEvent): { sender: string; title: string; body: string } | null {
+  const friendly = friendlyOf(event);
+  if (!friendly) return null;
+  const code = codeLine(friendly, false);
+  /* La raison d'abord (vide s'il n'y en a pas), puis le code : la page coupe à la première ligne vide. */
+  return { sender: friendly.sender, title: friendly.ask.slice(0, 120), body: (code ? `${friendly.why ?? ""}\n\n${code}` : (friendly.why ?? "")).slice(0, 600) };
+}
+
+/**
+ * Après la réponse, l'agent accuse réception (« Thanks, I'm going ahead. ») ; un résultat qui
+ * n'est pas celui attendu (la demande a expiré, l'action a échoué) reste dit tel quel.
+ */
+export function friendlyResult(choice: string, result: string): string {
+  if (/^Approved, but the action failed/.test(result)) return "I tried, but it failed.";
+  if (/^Approved: the action ran/.test(result) && (choice === "approve" || choice === "allow-hour")) return friendlyDone(choice);
+  if (/^Refused: the action did not run/.test(result) && choice === "reject") return friendlyDone("reject");
+  return result;
+}
+
+/**
  * Ce que dit la notification : qui veut faire quoi, sur quoi exactement, et pourquoi Oathrion
  * demande (16 novembre, retour des premiers testeurs : sans le quoi ni le pourquoi, on approuve
  * sans lire). `content: false` : sans le contenu (les arguments peuvent être privés) — pour le
@@ -146,10 +193,20 @@ function wordsOf(event: NotificationEvent): NotificationWords | null {
 export function desktopText(event: NotificationEvent, { content = true }: { content?: boolean } = {}): { title: string; body: string } {
   /* Plusieurs demandes rapprochées, en une seule notification (`notifications/coalesce.ts`) : la liste, pas un renvoi à la console. */
   if (typeof event.data.grouped === "number") {
-    const lines = Array.isArray(event.data.headlines) ? event.data.headlines.filter((h): h is string => typeof h === "string") : [];
+    /* Plusieurs questions du même agent : il les pose ensemble, comme on enchaîne des messages. */
+    const asks = Array.isArray(event.data.asks) ? event.data.asks.filter((h): h is string => typeof h === "string") : [];
+    const lines = asks.length > 0 ? asks : Array.isArray(event.data.headlines) ? event.data.headlines.filter((h): h is string => typeof h === "string") : [];
     const more = event.data.grouped - Math.min(lines.length, 3);
-    const body = lines.length > 0 ? [...lines.slice(0, 3).map((line) => `· ${line}`), ...(more > 0 ? [`· and ${String(more)} more`] : []), "Decide each one in Oathrion's console."].join("\n") : `${event.summary} Decide in Oathrion's console.`;
-    return { title: `${String(event.data.grouped)} requests are waiting for your decision`.slice(0, 120), body: body.slice(0, 300) };
+    const mascot = event.data.mascot as { name?: unknown } | undefined;
+    const sender = event.data.sameAgent === false ? "Your agents" : friendlySender(event.agentName, typeof mascot?.name === "string" ? mascot.name : null);
+    const body = [friendlyGrouped(event.data.grouped), ...lines.slice(0, 3).map((line) => `· ${line}`), ...(more > 0 ? [`· and ${String(more)} more`] : []), "Answer each one in Oathrion's console."].join("\n");
+    return { title: sender.slice(0, 120), body: body.slice(0, 300) };
+  }
+  /* Une demande : l'agent écrit, comme un ami. Son nom en titre, la question, ce que ça change, son code. */
+  const friendly = friendlyOf(event);
+  if (friendly) {
+    const lines = [friendly.ask, friendly.why, codeLine(friendly, content)].filter((line): line is string => Boolean(line));
+    return { title: friendly.sender.slice(0, 120), body: lines.join("\n").slice(0, 300) };
   }
   const words = wordsOf(event);
   const why = words?.why ? `Why: ${words.why}.` : null;
@@ -174,10 +231,9 @@ export function desktopText(event: NotificationEvent, { content = true }: { cont
    */
   if (event.data.unknownProgram === true) {
     const here = Array.isArray(event.data.actions) && event.data.actions.length > 0;
-    return {
-      title: (typeof event.data.title === "string" ? event.data.title : `First time Oathrion meets "${event.agentName}": is it yours?`).slice(0, 120),
-      body: `Nothing it asks goes through until you answer: Oathrion checks each program once, the first time. If you just started ${event.agentName}, it is yours. ${here ? "Confirm it or block it here." : "Confirm it or block it in Oathrion's console."}`.slice(0, 300),
-    };
+    /* Warden parle : Oathrion a retenu ce programme, une fois, la première fois qu'il le voit. */
+    const said = wardenUnknownProgram(event.agentName, here);
+    return { title: said.title, body: said.body.slice(0, 300) };
   }
   /* Une demande d'approbation : les mots de la console (« claude-code wants to create note on the carnet server »). */
   if (words && event.type === "approval.requested") {
@@ -229,10 +285,11 @@ export function notificationActions(event: NotificationEvent): { id: string; lab
   }
   if (event.type === "approval.requested" && event.approvalId) {
     return [
-      { id: "approve", label: "Approve" },
-      { id: "reject", label: "Reject" },
+      /* Les boutons répondent à la question de l'agent (« Can I…? ») : oui, non. */
+      { id: "approve", label: FRIENDLY_BUTTONS.approve },
+      { id: "reject", label: FRIENDLY_BUTTONS.reject },
       /* Un outil d'un serveur derrière Oathrion : une heure sans redemander (`local-hour-passes.ts`). */
-      ...(passable(event.data.action) ? [{ id: "allow-hour", label: "Allow 1 hour" }] : []),
+      ...(passable(event.data.action) ? [{ id: "allow-hour", label: FRIENDLY_BUTTONS["allow-hour"] }] : []),
     ];
   }
   return [];
@@ -389,10 +446,12 @@ export class DesktopChannel implements NotificationChannel {
           void (async () => {
             this.undecided.delete(event.id);
             const { text, share } = doneOf(await this.options.onAction?.(event, message.choice as string));
+            /* Le résultat tel quel pour ce qui est gardé (le feedback) ; à l'écran, l'agent répond comme un ami. */
             decision = text;
+            const shown = friendlyOf(event) ? friendlyResult(message.choice as string, text) : text;
             if (share && this.options.onShare) sentence = share;
             const receipt = event.type === "approval.requested" && event.executionId !== null && this.options.onReceipt !== undefined;
-            child.stdin?.write(`${JSON.stringify({ done: decision, ...(sentence && this.options.onShare ? { share: sentence } : {}), ...(receipt ? { receipt: true } : {}) })}\n`);
+            child.stdin?.write(`${JSON.stringify({ done: shown, ...(sentence && this.options.onShare ? { share: sentence } : {}), ...(receipt ? { receipt: true } : {}) })}\n`);
           })().catch(() => undefined);
         } else if (message.feedback === "right" || message.feedback === "wrong") {
           this.options.onFeedback?.(event, message.feedback === "right", decision);
@@ -432,10 +491,11 @@ export class DesktopChannel implements NotificationChannel {
       return;
     }
     const decision = doneOf(await this.options.onAction?.(event, actionId)).text;
+    const shown = friendlyOf(event) ? friendlyResult(actionId, decision) : decision;
     if (!this.options.onFeedback) return;
     await this.launch(
       "notify-send",
-      ["--app-name=Oathrion", ...image, "--action=right=👍 Right", "--action=wrong=👎 Wrong", `${decision}. Was Oathrion right?`, "Your answer stays on this machine."],
+      ["--app-name=Oathrion", ...image, "--action=right=👍 Right", "--action=wrong=👎 Wrong", `${shown.replace(/\.$/, "")}. Was Oathrion right?`, "Your answer stays on this machine."],
       (stdout) => {
         const verdict = stdout.trim();
         if (verdict === "right" || verdict === "wrong") this.options.onFeedback?.(event, verdict === "right", decision);

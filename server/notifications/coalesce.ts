@@ -34,6 +34,9 @@ export function groupedEvent(events: readonly NotificationEvent[]): Notification
       titles: events.map((event) => event.title).slice(0, 5),
       /* Ce que chacune demande, dit comme dans la console : la notification les liste (`desktopText`). */
       headlines: events.map((event) => (event.data.words as { headline?: unknown } | undefined)?.headline).filter((h): h is string => typeof h === "string").slice(0, 5),
+      /* Les mêmes, dites par l'agent comme un ami (`shared/friendly-words.ts`). */
+      asks: events.map((event) => (event.data.words as { friendly?: { ask?: unknown } } | undefined)?.friendly?.ask).filter((h): h is string => typeof h === "string").slice(0, 5),
+      sameAgent: events.every((event) => event.agentName === first.agentName),
     },
   };
 }

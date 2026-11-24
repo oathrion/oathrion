@@ -14,10 +14,11 @@
  *
  * Fonctions pures : l'opération `bundle` du pivot leur passe le journal et la clé.
  */
+import type { PhoneApproval } from "@shared/phone-approval";
 import { BUNDLE_TYPE, type SignedDocument } from "@shared/receipt-share";
 
 import type { JournalEntry } from "../cli/wrap/claude-journal";
-import { fromJournal } from "./local-activity";
+import { fromJournal, withPhoneApprovals, type HandoffAnswer, type HandoffDecision } from "./local-activity";
 import { OUTCOME_LABEL } from "./local-receipt";
 import { summarize, type ChainVerdict } from "./local-summary";
 
@@ -43,12 +44,14 @@ export interface BundleAction {
   ref: string;
   /** Les lignes de cette action dans le journal chaîné : position et empreinte. */
   entries: { seq: number; hash: string }[];
+  /** La réponse de la personne, signée par son téléphone (`shared/phone-approval.ts`). */
+  approval?: PhoneApproval;
 }
 
 export interface BundleStatement extends SignedDocument {
   type: typeof BUNDLE_TYPE;
   scope: BundleScope;
-  summary: { total: number; passed: number; asked: number; blocked: number; refusedByPerson: number; waiting: number };
+  summary: { total: number; passed: number; asked: number; blocked: number; refusedByPerson: number; waiting: number; signedByPhone?: number };
   actions: BundleAction[];
   /** Plus d'actions que le paquet n'en garde : il le dit. */
   truncated: number;
@@ -70,7 +73,7 @@ export function relativize(text: string, project: string, home: string): string 
 }
 
 /** Une ligne du journal appartient-elle à ce dépôt ? Sa cible le nomme. */
-function inProject(target: string, project: string): boolean {
+export function inProject(target: string, project: string): boolean {
   return target === `shell://${project}` || target.startsWith(`shell://${project}/`) || target.startsWith(`file://${project}/`);
 }
 
@@ -85,10 +88,14 @@ export function bundleStatement(input: {
   issuer: SignedDocument["issuer"];
   issuedAt: string;
   maxActions?: number;
+  /** Les réponses des personnes (passage de relais du hook) et les accords signés par leur téléphone. */
+  answers?: HandoffAnswer;
+  decisions?: HandoffDecision;
+  approvals?: ReadonlyMap<string, PhoneApproval>;
 }): BundleStatement {
   const project = input.project.replace(/\/+$/, "");
   const lines = input.lines.filter((line) => inProject(line.target, project));
-  const entries = fromJournal(lines).filter((entry) => entry.at >= input.scope.since && entry.at <= input.scope.until);
+  const entries = withPhoneApprovals(fromJournal(lines, input.answers, input.decisions), input.approvals).filter((entry) => entry.at >= input.scope.since && entry.at <= input.scope.until);
   const sorted = [...entries].sort((a, b) => a.at.localeCompare(b.at));
   const max = input.maxActions ?? MAX_BUNDLE_ACTIONS;
   const hashes = new Map<string, { seq: number; hash: string }[]>();
@@ -103,7 +110,15 @@ export function bundleStatement(input: {
     issuedAt: input.issuedAt,
     issuer: input.issuer,
     scope: input.scope,
-    summary: { total: summary.total, passed: summary.passed, asked: summary.asked, blocked: summary.blocked, refusedByPerson: summary.refusedByPerson, waiting: summary.waiting },
+    summary: {
+      total: summary.total,
+      passed: summary.passed,
+      asked: summary.asked,
+      blocked: summary.blocked,
+      refusedByPerson: summary.refusedByPerson,
+      waiting: summary.waiting,
+      ...(input.approvals ? { signedByPhone: entries.filter((entry) => entry.phone).length } : {}),
+    },
     actions: sorted.slice(-max).map((entry) => ({
       at: entry.at,
       agent: entry.agent,
@@ -114,6 +129,7 @@ export function bundleStatement(input: {
       impact: entry.impact ?? null,
       ref: entry.ref,
       entries: hashes.get(entry.ref) ?? [],
+      ...(entry.phone ? { approval: entry.phone } : {}),
     })),
     truncated: Math.max(0, sorted.length - max),
     evidence: { chain: "Claude Code journal kept by Oathrion's hook", intact: input.journal.ok, entries: input.journal.entries, head: input.journal.head },

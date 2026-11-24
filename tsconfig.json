@@ -6,7 +6,7 @@
   // survived a fully green `npm run verify`. Adding it caught one real fault
   // immediately: a `spawn()` result cast to a type that claimed a writable stdin the
   // process did not have.
-  "include": ["client/src/**/*", "shared/**/*", "server/**/*", "script/**/*.ts", "sdk/**/*.ts", "cli/**/*.ts", "examples/**/*.ts"],
+  "include": ["client/src/**/*", "shared/**/*", "server/**/*", "script/**/*.ts", "sdk/**/*.ts", "cli/**/*.ts", "examples/**/*.ts", "relay/src/**/*.ts", "relay/script/**/*.ts", "relay/test/**/*.ts"],
   "exclude": ["node_modules", "build", "dist"],
   "compilerOptions": {
     "incremental": true,

@@ -145,10 +145,11 @@ export interface BundleVerdict {
  * donnée), et si son dernier commit fait partie de la PR. Des commits arrivés APRÈS lui ne
  * sont pas couverts : c'est dit, sans échouer (version 0).
  */
-export function bundleVerdict(check: ReceiptCheck, pinned: boolean | null, coverage: { after: number; ancestor: boolean } | null): BundleVerdict {
+export function bundleVerdict(check: ReceiptCheck, pinned: boolean | null, coverage: { after: number; ancestor: boolean } | null, badPhones = 0): BundleVerdict {
   const problems: string[] = [];
   const notes: string[] = [];
   if (!check.ok) problems.push(check.reason);
+  if (check.ok && badPhones > 0) problems.push(`${String(badPhones)} phone approval(s) inside it do not check`);
   if (pinned === false) problems.push("it is signed by a fingerprint that is not in OATHRION_TRUSTED_FINGERPRINTS");
   if (coverage && !coverage.ancestor) problems.push("the commit it covers is not part of this pull request");
   if (coverage && coverage.ancestor && coverage.after > 0) notes.push(`${String(coverage.after)} commit(s) after the receipt are not covered by it`);
@@ -164,6 +165,7 @@ export function bundleLines(bundle: Signed<BundleStatement>, check: ReceiptCheck
     `  ${scope.branch ?? "branch"}${scope.repository ? ` · ${scope.repository}` : ""} · up to ${scope.head?.slice(0, 7) ?? "?"}`,
     `  ${String(summary.total)} action(s) by Claude Code · ${String(summary.passed)} went through · ${String(summary.asked)} asked a person · ${String(summary.blocked)} blocked`,
     ...statement.actions.filter((a) => a.outcome === "refused").slice(-5).map((a) => `  ✋ ${a.what}${a.impact ? ` — would have deleted ${a.impact}` : ""}`),
+    ...statement.actions.filter((a) => a.approval).slice(-5).map((a) => `  📱 ${a.outcomeLabel}, signed on ${a.approval!.device.label || "a paired phone"}: ${a.what}`),
     ...(statement.evidence.intact ? [] : ["  ⚠ The journal's chain was not intact when this receipt was signed."]),
     ...(check.ok ? [`  Signed by ${statement.issuer.name} · fingerprint ${check.fingerprint}`] : []),
     ...verdict.notes.map((note) => `  Note: ${note}.`),
@@ -185,7 +187,7 @@ export function bundleMarkdown(
   const { statement } = bundle;
   const { summary, scope } = statement;
   const notable = statement.actions.filter((a) => a.outcome !== "done" && a.outcome !== "not-run").slice(-20);
-  const icon = (outcome: string) => (outcome === "refused" || outcome === "refused-by-person" ? "✋" : outcome.includes("failed") ? "⚠️" : "🙋");
+  const icon = (outcome: string, phone: boolean) => (outcome === "refused" || outcome === "refused-by-person" ? "✋" : outcome.includes("failed") ? "⚠️" : phone ? "📱" : "🙋");
   return [
     `### ${verdict.ok ? "✅" : "❌"} Oathrion — no receipt, no merge`,
     "",
@@ -197,7 +199,7 @@ export function bundleMarkdown(
     ...(!check.ok
       ? ["Its content cannot be trusted, so it is not shown here.", ""]
       : notable.length > 0
-      ? ["| | Action | Outcome |", "|---|---|---|", ...notable.map((a) => `| ${icon(a.outcome)} | \`${cell(a.what)}\` | ${cell(a.outcomeLabel)}${a.impact ? ` — would have deleted ${cell(a.impact)}` : ""}${a.detail ? ` · ${cell(a.detail)}` : ""} |`), ""]
+      ? ["| | Action | Outcome |", "|---|---|---|", ...notable.map((a) => `| ${icon(a.outcome, a.approval !== undefined)} | \`${cell(a.what)}\` | ${cell(a.outcomeLabel)}${a.approval ? ` · signed on ${cell(a.approval.device.label || "a paired phone")} ✓` : ""}${a.impact ? ` — would have deleted ${cell(a.impact)}` : ""}${a.detail ? ` · ${cell(a.detail)}` : ""} |`), ""]
       : ["Nothing was asked or blocked: every action stayed within the rules.", ""]),
     `Signed by ${statement.issuer.name} · \`${check.ok ? check.fingerprint : statement.issuer.fingerprint}\` ${pinned === true ? "· pinned ✓" : pinned === false ? "· **not trusted**" : "· not pinned"}  `,
     `Covers commits up to \`${scope.head?.slice(0, 7) ?? "?"}\`${coverage && coverage.after > 0 ? ` · **${String(coverage.after)} later commit(s) not covered**` : ""} · journal chain ${statement.evidence.intact ? "intact" : "**not intact**"} · \`${file}\``,

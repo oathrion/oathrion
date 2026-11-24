@@ -57,7 +57,7 @@ describe("le rapport d'une période", () => {
       entry({ outcome: "refused", detail: "rule rm-outside-project", action: "rm -rf /home/awa", at: "2026-11-12T10:00:00.000Z" }),
     ]);
     expect(report.type).toBe(REPORT_TYPE);
-    expect(report.summary).toEqual({ total: 7, passed: 1, asked: 4, approvedByPerson: 1, refusedByPerson: 1, waiting: 1, blocked: 2 });
+    expect(report.summary).toEqual({ total: 7, passed: 1, asked: 4, approvedByPerson: 1, refusedByPerson: 1, waiting: 1, blocked: 2, signedByPhone: 0 });
     expect(report.outcomes).toEqual({ done: 1, "asked-done": 1, "approved-done": 1, "refused-by-person": 1, waiting: 1, refused: 2 });
     expect(report.agents).toEqual([
       { agent: "Claude Code", total: 5, asked: 2, blocked: 2 },

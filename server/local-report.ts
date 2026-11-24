@@ -20,10 +20,14 @@
  *
  * Fonction pure : l'opération `report` du pivot lui passe la chronologie, les verdicts et la clé.
  */
+import type { PhoneApproval } from "@shared/phone-approval";
+import { plainStep, type StepKey } from "@shared/plain-step";
 import { REPORT_TYPE, type SignedDocument } from "@shared/receipt-share";
 import { redactSecrets } from "@shared/secrets";
 
 import type { ActivityEntry, ActivityOutcome } from "./local-activity";
+import { inProject, relativize } from "./local-bundle";
+import { OUTCOME_LABEL } from "./local-receipt";
 import { BUCKET } from "./local-summary";
 
 export interface ReportChain {
@@ -41,12 +45,48 @@ export interface ReportSave {
   rule: string | null;
   impact: string | null;
   ref: string;
+  /** Ce qui a été arrêté, en mots simples (« delete files »). */
+  todo?: string;
+}
+
+/** Une décision d'une personne : l'action retenue pour elle, sa réponse, et l'accord signé par son téléphone s'il y en a un. */
+export interface ReportDecision {
+  at: string;
+  agent: string;
+  what: string;
+  outcome: ActivityOutcome;
+  outcomeLabel: string;
+  ref: string;
+  approval: PhoneApproval | null;
+  /** Ce qui a été demandé, en mots simples (« publish the code to the shared repository »). */
+  todo?: string;
+}
+
+/** Une étape du relevé d'un client, en mots simples ; la commande exacte reste à côté. */
+export interface ReportStep {
+  at: string;
+  agent: string;
+  what: string;
+  /** « Ran the tests ». */
+  done: string;
+  key: StepKey;
+  detail: string | null;
+  outcome: ActivityOutcome;
+  ref: string;
+}
+
+/** Le périmètre d'un relevé de client : un dossier (le journal du hook) et des serveurs MCP nommés. */
+export interface ReportScope {
+  project: string | null;
+  servers: string[];
 }
 
 export interface ReportStatement extends SignedDocument {
   type: typeof REPORT_TYPE;
   /** Pour qui le rapport est émis, tel que la personne l'a écrit (`--for`) : déclaré, pas prouvé. */
   subject: string | null;
+  /** Le relevé d'un client : seulement ce dossier et ces serveurs ; absent, toute la machine. */
+  scope?: ReportScope;
   period: { since: string; until: string };
   summary: {
     total: number;
@@ -57,6 +97,8 @@ export interface ReportStatement extends SignedDocument {
     refusedByPerson: number;
     waiting: number;
     blocked: number;
+    /** Parmi les réponses des personnes : celles signées par leur téléphone. */
+    signedByPhone?: number;
   };
   /** Chaque issue rencontrée, comptée : le détail derrière le résumé. */
   outcomes: Partial<Record<ActivityOutcome, number>>;
@@ -67,6 +109,12 @@ export interface ReportStatement extends SignedDocument {
   saves: ReportSave[] | null;
   /** Plus d'actions bloquées que le rapport n'en garde : il le dit. */
   savesTruncated: number;
+  /** Les réponses des personnes, les plus récentes d'abord ; null si le rapport ne garde que des nombres. */
+  decisions?: ReportDecision[] | null;
+  decisionsTruncated?: number;
+  /** Le relevé d'un client : toutes les étapes du projet, de la plus ancienne à la plus récente (les plus récentes si trop nombreuses). */
+  steps?: ReportStep[];
+  stepsTruncated?: number;
   coverage: {
     /** La première action enregistrée sur cette machine, toutes périodes confondues. */
     recordStarts: string | null;
@@ -78,6 +126,37 @@ export interface ReportStatement extends SignedDocument {
 }
 
 export const MAX_REPORT_SAVES = 200;
+export const MAX_REPORT_DECISIONS = 200;
+export const MAX_REPORT_STEPS = 2_000;
+
+/** Les réponses d'une personne : approuvée, refusée, ou demandée puis tranchée dans le client. */
+const PERSON_DECIDED: ReadonlySet<ActivityOutcome> = new Set(["approved-done", "approved-failed", "approved-not-run", "refused-by-person", "asked-done", "asked-failed", "asked-not-run"]);
+
+/** Les étapes d'un relevé de client : en mots simples, dans l'ordre ; les plus récentes si elles sont trop nombreuses. */
+function stepsOf(entries: readonly ActivityEntry[], clean: (text: string) => string): { steps: ReportStep[]; stepsTruncated: number } {
+  const sorted = [...entries].sort((a, b) => a.at.localeCompare(b.at));
+  const kept = sorted.slice(-MAX_REPORT_STEPS);
+  return {
+    steps: kept.map((entry) => {
+      const what = clean(entry.action);
+      const step = plainStep(what, entry.target);
+      return { at: entry.at, agent: entry.agent, what, done: step.done, key: step.key, detail: step.detail, outcome: entry.outcome, ref: entry.ref };
+    }),
+    stepsTruncated: sorted.length - kept.length,
+  };
+}
+
+/** Le serveur MCP d'une action passée par Oathrion (`mcp.<serveur>.<verbe>`). */
+export function serverOf(entry: ActivityEntry): string | null {
+  return entry.source === "oathrion" ? (/^mcp\.([^.]+)\./.exec(entry.action)?.[1] ?? null) : null;
+}
+
+/** Ce qu'un relevé de client garde : les actions du dossier, et celles des serveurs nommés. */
+export function inScope(entry: ActivityEntry, scope: ReportScope): boolean {
+  if (entry.source === "claude-code") return scope.project !== null && inProject(entry.target, scope.project.replace(/\/+$/, ""));
+  const server = serverOf(entry);
+  return server !== null && scope.servers.includes(server);
+}
 
 /** Le dossier personnel devient « ~ » : aucun chemin de la machine ne sort. */
 function withoutHome(text: string, home: string): string {
@@ -107,9 +186,14 @@ export function reportStatement(input: {
   issuer: SignedDocument["issuer"];
   issuedAt: string;
   maxSaves?: number;
+  scope?: ReportScope | null;
 }): ReportStatement {
-  const clean = (text: string) => redactSecrets(withoutHome(text, input.home));
-  const inPeriod = input.entries.filter((entry) => entry.at >= input.since && entry.at <= input.until);
+  const scope = input.scope ?? null;
+  const project = scope?.project ? scope.project.replace(/\/+$/, "") : null;
+  /* Le dossier du client devient « . » dans ce qui sort, comme dans le paquet d'une PR. */
+  const clean = (text: string) => redactSecrets(project ? relativize(text, project, input.home) : withoutHome(text, input.home));
+  const entries = scope ? input.entries.filter((entry) => inScope(entry, scope)) : input.entries;
+  const inPeriod = entries.filter((entry) => entry.at >= input.since && entry.at <= input.until);
   const outcomes: Partial<Record<ActivityOutcome, number>> = {};
   const agents = new Map<string, { total: number; asked: number; blocked: number }>();
   const rules = new Map<string, { asked: number; blocked: number }>();
@@ -132,12 +216,14 @@ export function reportStatement(input: {
   const count = (predicate: (outcome: ActivityOutcome) => boolean) => inPeriod.filter((entry) => predicate(entry.outcome)).length;
   const blocked = inPeriod.filter((entry) => entry.outcome === "refused").sort((a, b) => b.at.localeCompare(a.at));
   const max = input.maxSaves ?? MAX_REPORT_SAVES;
-  const first = input.entries.reduce<string | null>((earliest, entry) => (earliest === null || entry.at < earliest ? entry.at : earliest), null);
+  const decided = inPeriod.filter((entry) => PERSON_DECIDED.has(entry.outcome)).sort((a, b) => b.at.localeCompare(a.at));
+  const first = entries.reduce<string | null>((earliest, entry) => (earliest === null || entry.at < earliest ? entry.at : earliest), null);
   return {
     type: REPORT_TYPE,
     issuedAt: input.issuedAt,
     issuer: input.issuer,
     subject: input.subject,
+    ...(scope ? { scope: { project: project ? withoutHome(project, input.home) : null, servers: [...scope.servers].sort() } } : {}),
     period: { since: input.since, until: input.until },
     summary: {
       total: inPeriod.length,
@@ -147,14 +233,21 @@ export function reportStatement(input: {
       refusedByPerson: count((outcome) => outcome === "refused-by-person"),
       waiting: count((outcome) => outcome === "waiting"),
       blocked: blocked.length,
+      signedByPhone: decided.filter((entry) => entry.phone).length,
     },
     outcomes,
     agents: [...agents].map(([agent, counts]) => ({ agent, ...counts })).sort((a, b) => b.total - a.total || a.agent.localeCompare(b.agent)),
     rules: [...rules].map(([rule, counts]) => ({ rule, ...counts })).sort((a, b) => b.blocked + b.asked - (a.blocked + a.asked) || a.rule.localeCompare(b.rule)),
     saves: input.countsOnly
       ? null
-      : blocked.slice(0, max).map((entry) => ({ at: entry.at, agent: entry.agent, what: clean(entry.action), rule: ruleOf(entry, clean), impact: entry.impact ?? null, ref: entry.ref })),
+      : blocked.slice(0, max).map((entry) => ({ at: entry.at, agent: entry.agent, what: clean(entry.action), rule: ruleOf(entry, clean), impact: entry.impact ?? null, ref: entry.ref, todo: plainStep(entry.action, entry.target).todo })),
     savesTruncated: input.countsOnly ? 0 : Math.max(0, blocked.length - max),
+    decisions: input.countsOnly
+      ? null
+      : decided.slice(0, MAX_REPORT_DECISIONS).map((entry) => ({ at: entry.at, agent: entry.agent, what: clean(entry.action), outcome: entry.outcome, outcomeLabel: OUTCOME_LABEL[entry.outcome], ref: entry.ref, approval: entry.phone ?? null, todo: plainStep(entry.action, entry.target).todo })),
+    decisionsTruncated: input.countsOnly ? 0 : Math.max(0, decided.length - MAX_REPORT_DECISIONS),
+    /* Seulement pour un client (un dossier, des serveurs) : tout ce qui s'est fait chez lui, en mots simples. */
+    ...(scope && !input.countsOnly ? stepsOf(inPeriod, clean) : {}),
     coverage: { recordStarts: first, partial: input.partial },
     evidence: {
       receipts: { chain: "Receipts of the actions that went through Oathrion", intact: input.receipts.ok, entries: input.receipts.entries, head: input.receipts.head },
@@ -163,6 +256,12 @@ export function reportStatement(input: {
     },
     limits: [
       "Only the agents protected by Oathrion on this machine: what went through Oathrion, and what Claude Code ran through Oathrion's hook. Actions outside Oathrion are not in it.",
+      ...(scope
+        ? [
+            `Only this scope: ${project ? "what Claude Code did in the project folder (written .)" : "no project folder"}${scope.servers.length > 0 ? `, and the MCP servers ${[...scope.servers].sort().join(", ")}` : ", and no MCP server"}. Other work on this machine is left out.`,
+          ]
+        : []),
+      "A decision signed on a phone carries that phone's own signature: it proves a paired phone gave this answer to the text it showed, not who held the phone. Other decisions carry no phone signature: made on this computer, or before the phone signed its answers.",
       "It is what Oathrion recorded, signed by this machine's key: the fingerprint names the key, not the person or the team. The subject is declared by whoever issued the report.",
       input.countsOnly ? "Counts only: no command is in this report." : "Secrets recognisable in commands are redacted before signing; the home folder is written ~.",
       ...(input.partial ? ["Oathrion could not read its whole record for this period: the counts may be lower than what happened."] : []),

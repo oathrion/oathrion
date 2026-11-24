@@ -1,0 +1,57 @@
+:root { color-scheme: dark; --ink: #eef0ff; --muted: #b9bce6; --ok: #7ff0dc; --warn: #ffb27a; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; font: 17px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: radial-gradient(ellipse 90% 55% at 60% 0%, #1d1868 0%, #06071c 62%, #02030a 100%); }
+main { max-width: 460px; margin: 0 auto; padding: 24px 20px 48px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: 0.02em; color: var(--muted); font-size: 15px; }
+.brand img { width: 28px; height: 28px; filter: drop-shadow(0 0 8px rgba(140, 120, 255, 0.85)); }
+h1 { font-size: 26px; line-height: 1.25; margin: 0 0 10px; }
+.grad { background: linear-gradient(90deg, #c98dff, #a68cff 50%, #8ea2ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.card { margin-top: 18px; padding: 20px; border-radius: 26px; border: 1.5px solid rgba(175, 155, 255, 0.7); background: linear-gradient(165deg, rgba(70, 56, 180, 0.42), rgba(12, 16, 60, 0.62)); box-shadow: 0 0 22px rgba(130, 100, 255, 0.45), inset 0 1px 30px rgba(150, 120, 255, 0.12); }
+.card.wait { border-color: rgba(63, 227, 200, 0.75); box-shadow: 0 0 24px rgba(63, 227, 200, 0.3); }
+.muted { color: var(--muted); font-size: 15px; }
+.small { font-size: 13px; }
+.ok { color: var(--ok); font-weight: 600; }
+.bad { color: var(--warn); }
+button, .button { display: block; width: 100%; margin-top: 12px; padding: 15px; min-height: 52px; border: 0; border-radius: 16px; font: 600 17px system-ui, sans-serif; color: #fff; text-align: center; text-decoration: none; background: linear-gradient(90deg, #7a5cff, #4a8cff); box-shadow: 0 0 18px rgba(110, 110, 255, 0.6); cursor: pointer; }
+button.ghost { background: rgba(20, 24, 70, 0.6); border: 1px solid rgba(150, 170, 255, 0.55); box-shadow: none; }
+button.stop { background: rgba(70, 24, 30, 0.55); border: 1.5px solid rgba(255, 140, 110, 0.75); box-shadow: 0 0 14px rgba(255, 120, 90, 0.25); }
+button.link { background: none; border: 0; box-shadow: none; color: var(--muted); font-weight: 500; font-size: 15px; min-height: 44px; padding: 10px; text-decoration: underline; text-underline-offset: 3px; }
+button:disabled { opacity: 0.55; }
+[hidden] { display: none !important; }
+
+/* L'anneau d'Oathrion, et la mascotte dedans. */
+.ring { width: 112px; height: 112px; margin: 18px auto 10px; padding: 3px; border-radius: 50%; background: conic-gradient(from 200deg, #7c5cff, #4fd8ff, #9b7bff, #4fd8ff, #7c5cff); box-shadow: 0 0 18px rgba(90, 170, 255, 0.7), 0 0 40px rgba(110, 90, 255, 0.35); position: relative; }
+.ring .inner { width: 100%; height: 100%; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 42%, #2a2a88 0%, #121350 55%, #080a2c 100%); }
+.ring img { width: 74%; height: 74%; object-fit: contain; filter: drop-shadow(0 0 12px rgba(160, 140, 255, 0.55)); }
+.ring .check { position: absolute; right: 2px; bottom: 4px; width: 32px; height: 32px; border-radius: 50%; background: #28d3b6; color: #06231e; display: flex; align-items: center; justify-content: center; font-weight: 900; box-shadow: 0 0 12px rgba(63, 227, 200, 0.8); }
+.ring.small { width: 64px; height: 64px; margin: 0; flex-shrink: 0; }
+.center { text-align: center; }
+
+.steps { display: flex; gap: 8px; justify-content: center; margin: 14px 0 4px; font-size: 13px; color: var(--muted); }
+.steps span { padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(150, 170, 255, 0.35); }
+.steps .on { color: #fff; border-color: rgba(63, 227, 200, 0.8); box-shadow: 0 0 10px rgba(63, 227, 200, 0.35); }
+
+label { display: block; margin-top: 14px; font-size: 14px; color: var(--muted); }
+input { width: 100%; margin-top: 6px; padding: 12px 14px; font: 16px system-ui, sans-serif; color: #fff; border-radius: 12px; border: 1px solid rgba(150, 170, 255, 0.5); background: rgba(14, 18, 60, 0.7); }
+
+ol.how { padding-left: 0; list-style: none; counter-reset: how; }
+ol.how li { counter-increment: how; display: flex; gap: 12px; align-items: flex-start; margin: 12px 0; }
+ol.how li::before { content: counter(how); flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; border: 1px solid rgba(150, 170, 255, 0.6); display: flex; align-items: center; justify-content: center; font-size: 13px; }
+.glyph { display: inline-block; vertical-align: -4px; width: 20px; height: 20px; }
+
+/* La page Decide. */
+.who { display: flex; gap: 14px; align-items: center; }
+.who .name { font-weight: 700; font-size: 18px; }
+.cmd { margin: 14px 0 8px; padding: 12px 14px; border-radius: 12px; background: rgba(4, 6, 24, 0.75); border: 1px solid rgba(150, 170, 255, 0.35); font: 15px/1.45 ui-monospace, "SF Mono", Menlo, monospace; word-break: break-all; white-space: pre-wrap; }
+.danger { border-color: rgba(255, 154, 82, 0.8) !important; box-shadow: 0 0 22px rgba(255, 140, 60, 0.3) !important; }
+.done { text-align: center; padding: 10px 0 4px; }
+.done .big { width: 84px; height: 84px; margin: 6px auto 12px; border-radius: 50%; background: #28d3b6; color: #06231e; font-size: 46px; font-weight: 900; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 26px rgba(63, 227, 200, 0.7); }
+.row { display: flex; gap: 10px; }
+.row button { flex: 1; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .pop { animation: pop 0.5s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+  .glow { animation: glow 2.4s ease-in-out infinite; }
+  @keyframes pop { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  @keyframes glow { 50% { box-shadow: 0 0 30px rgba(90, 170, 255, 0.95), 0 0 60px rgba(110, 90, 255, 0.5); } }
+}

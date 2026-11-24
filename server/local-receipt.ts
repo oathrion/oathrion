@@ -8,6 +8,7 @@
  *
  * Fonction pure : la route lui passe l'entrée, la preuve et l'émetteur.
  */
+import { plainStep } from "@shared/plain-step";
 import { RECEIPT_TYPE, type ReceiptStatement } from "@shared/receipt-share";
 
 import type { ActivityEntry, ActivityOutcome } from "./local-activity";
@@ -53,7 +54,9 @@ export function receiptStatement(entry: ActivityEntry, evidence: ChainEvidence, 
       detail: entry.detail,
       impact: entry.impact ?? null,
       ref: entry.ref,
+      todo: plainStep(entry.action, entry.target).todo,
     },
     evidence,
+    ...(entry.phone ? { approval: entry.phone } : {}),
   };
 }

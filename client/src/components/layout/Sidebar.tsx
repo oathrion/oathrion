@@ -18,10 +18,10 @@ import {
   LogOut,
   Rocket,
   History,
-  ShieldHalf,
   FileSignature,
   ChevronRight,
-  Home,
+  IdCard,
+  Monitor,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -88,17 +88,15 @@ export function Sidebar({
     { href: "/settings", label: "Settings", icon: Settings },
   ];
   /*
-   * En local (`oathrion wrap`), cinq pages (11 novembre : « enlever tout ce qui rend
-   * l'expérience complexe ») : l'accueil et son fil d'actualité, ce qui attend une décision, les
-   * agents, ce qui est protégé, les réglages. Le reste (le détail des actions, les règles, les
-   * chiffres, la version équipe) est rangé sous « Details », replié.
+   * En local (`oathrion wrap`), depuis le 23 novembre, la console tourne autour du PASSEPORT de
+   * chaque agent (`notes/CONSTRUCTION-CONSOLE-PASSEPORT.md`) : les passeports (l'accueil, et la page
+   * de chaque agent, où vivent son fil, ses règles et ses reçus), les décisions qui attendent, la
+   * machine (ce qui est couvert), et les retours. Le reste est rangé sous « Details », replié.
    */
   const localItems: NavItem[] = [
-    { href: "/home", label: "Home", icon: Home },
-    { href: "/approvals", label: "Approvals", icon: ScrollText, badge: pendingApprovals },
-    { href: "/agents", label: "Agents", icon: Bot },
-    { href: "/protection", label: "Protection", icon: ShieldHalf },
-    { href: "/settings", label: "Settings", icon: Settings },
+    { href: "/home", label: "Passports", icon: IdCard },
+    { href: "/approvals", label: "Decisions", icon: ScrollText, badge: pendingApprovals },
+    { href: "/protection", label: "This machine", icon: Monitor },
     /* 16 novembre : « la qualité du logiciel sera celle des retours » ; toujours à portée. */
     { href: "/feedback", label: "Send feedback", icon: MessageSquare },
   ];
@@ -109,7 +107,9 @@ export function Sidebar({
    * lien dans les réglages.
    */
   const localDetails: NavItem[] = [
+    { href: "/settings", label: "Settings", icon: Settings },
     { href: "/activity", label: "Activity", icon: History },
+    { href: "/agents", label: "Agents", icon: Bot },
     { href: "/servers", label: "Servers", icon: Plug },
     { href: "/policies", label: "Policies", icon: ShieldCheck },
   ];
@@ -119,7 +119,10 @@ export function Sidebar({
   const inDetails = local && localDetails.some((item) => location === item.href || location.startsWith(`${item.href}/`));
 
   const isActive = (href: string) =>
-    location === href || location.startsWith(`${href}/`) || (href === "/onboarding" && location === "/");
+    location === href ||
+    location.startsWith(`${href}/`) ||
+    (href === "/onboarding" && location === "/") ||
+    (local && href === "/home" && location.startsWith("/passport/"));
 
   return (
     <aside

@@ -18,6 +18,8 @@
  * par l'environnement.
  */
 import "./net-patience";
+import { wardenDecoy, wardenPaused } from "@shared/friendly-words";
+
 import { enterLocalMode } from "./local-mode";
 
 enterLocalMode();
@@ -200,8 +202,13 @@ async function main(): Promise<void> {
         id: `demo_${Date.now().toString(36)}`,
         name: "demo",
         mascotOf: "agy",
-        title: `${nova} (demo) is paused`,
-        description: "A demo: no real agent was paused. Try Stop, then Share it.",
+        /*
+         * Un texte précis et calme (23 novembre, essai réel sur le téléphone du fondateur : Chrome
+         * sur Android signalait « Nova (demo) is paused… Try Stop, then Share it » comme un spam
+         * possible ; la notification d'essai, claire, passait).
+         */
+        title: `Oathrion demo: ${nova} was paused before acting`,
+        description: `Nothing real happened. This is how Oathrion asks you before an agent acts: choose whether ${nova} stops or resumes.`,
         actions: [
           { id: "stop", label: "Stop" },
           { id: "resume", label: "Resume this time" },
@@ -262,8 +269,9 @@ async function main(): Promise<void> {
           id: `outside_${agent.agent}`,
           name: agent.agent,
           /* Court, comme la maquette : le chemin et le processus sont dans la console (« details »). */
-          title: paused ? `${face(agent.agent).name} (${agent.agent}) is paused` : `${face(agent.agent).name} (${agent.agent}) runs without Oathrion's protection`,
-          description: paused ? "It was running without Oathrion's protection. Nothing is lost." : "It can go around Oathrion. Stop it, or allow it.",
+          /* Warden parle : Oathrion a agi (`shared/friendly-words.ts`). */
+          title: wardenPaused(face(agent.agent).name, paused !== null).title,
+          description: wardenPaused(face(agent.agent).name, paused !== null).body,
           /* « Stop », le geste sûr, en premier (la maquette du 11 novembre) ; « Allow » : dehors, pour de bon. */
           actions: [
             { id: "stop", label: "Stop" },
@@ -309,8 +317,8 @@ async function main(): Promise<void> {
           share: shareOf(read),
           id: `decoy_${event.path}`,
           name: "decoy",
-          title: "Something read one of your decoys",
-          description: `No honest task does that: ${shown} was read. ${outside.length > 0 ? `Running without Oathrion's protection at that moment: ${outside.map((a) => `${a.agent} (process ${String(a.pid)})`).join(", ")}.` : "No AI agent was running outside the jail at that moment."} If it was you, or a backup or search tool, you can ignore it.`,
+          title: wardenDecoy(shown).title,
+          description: `${wardenDecoy(shown).body} ${outside.length > 0 ? `At that moment, ${outside.map((a) => a.agent).join(", ")} was running without me.` : ""} If it was you, or a backup or search tool, you can ignore it.`.replace(/\s+/g, " "),
           actions: [{ id: "open", label: "See what happened" }],
           feedbackAbout: `reported that ${shown} was read`,
         });

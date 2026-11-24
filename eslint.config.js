@@ -47,4 +47,18 @@ export default tseslint.config(
       "no-console": ["warn", { allow: ["warn", "error"] }],
     },
   },
+  {
+    /*
+     * La page du téléphone, servie par le relais (`relay/public/`) : du JavaScript de navigateur
+     * et de service worker, sans module. `common.js` y définit `OATH`, que les autres lisent.
+     */
+    files: ["relay/public/**/*.js"],
+    languageOptions: { ecmaVersion: 2022, sourceType: "script", globals: { ...globals.browser, ...globals.serviceworker } },
+    rules: { "@typescript-eslint/no-unused-vars": ["error", { varsIgnorePattern: "^OATH$" }] },
+  },
+  {
+    files: ["relay/public/**/*.js"],
+    ignores: ["relay/public/common.js"],
+    languageOptions: { globals: { OATH: "readonly" } },
+  },
 );

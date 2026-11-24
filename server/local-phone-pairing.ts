@@ -30,7 +30,7 @@ interface Update {
 }
 
 /** Le QR code du lien : une ligne de « 0 » et de « 1 » par module, que la console dessine. */
-function qrOf(text: string): { size: number; cells: string } {
+export function qrOf(text: string): { size: number; cells: string } {
   const { modules } = create(text, { errorCorrectionLevel: "M" });
   let cells = "";
   for (let row = 0; row < modules.size; row += 1) for (let col = 0; col < modules.size; col += 1) cells += modules.get(row, col) ? "1" : "0";
@@ -113,7 +113,7 @@ export class PhonePairing {
     if (!paired(settings)) throw new Error("No phone is paired.");
     await new TelegramApi(settings.token, this.options.fetchImpl).sendCard(
       settings.chatId,
-      phoneCaption("Oathrion: your phone is paired", "A request from one of your agents will look like this, with Approve and Reject. Tap them from anywhere: your computer fetches your answer itself.", false),
+      phoneCaption("Oathrion: your phone is paired", "Your agents' questions will arrive like this. Answer yes or no from anywhere: your computer fetches your answer itself.", false),
       this.options.mascot ?? null,
       null,
     );

@@ -1,0 +1,23 @@
+{
+  "name": "oathrion-relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Oathrion's phone relay: the official Telegram bot, and the outbound connection of each computer's Oathrion (notes: CONCEPTION-RELAIS-TELEPHONE).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "start": "node src/node-main.ts",
+    "keys": "node script/keys.ts",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "ws": "8.18.3"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.1",
+    "wrangler": "4.166.0"
+  }
+}

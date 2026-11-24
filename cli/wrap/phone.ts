@@ -68,7 +68,7 @@ export async function runPhone(argv: readonly string[], io: PhoneIo): Promise<nu
   const settings = readTelegram(dir);
 
   if (command === undefined) {
-    if (paired(settings)) io.out(`Phone: paired, through Telegram (@${settings.bot}). Requests arrive there, with Approve and Reject.`);
+    if (paired(settings)) io.out(`Phone: paired, through Telegram (@${settings.bot}). Requests arrive there: you answer yes or no.`);
     else io.out('Phone: not paired. "oathrion phone telegram" pairs it in two minutes.');
     return 0;
   }
@@ -90,7 +90,7 @@ export async function runPhone(argv: readonly string[], io: PhoneIo): Promise<nu
     try {
       await new TelegramApi(settings.token, io.fetchImpl).sendCard(
         settings.chatId,
-        phoneCaption("Oathrion: test", "A request from one of your agents will look like this, with Approve and Reject. Tap them from anywhere: your computer fetches your answer itself.", false),
+        phoneCaption("Oathrion: test", "Your agents' questions will arrive like this. Answer yes or no from anywhere: your computer fetches your answer itself.", false),
         shippedFile(io.script, "mascots/warden.png"),
         null,
       );
@@ -163,7 +163,7 @@ export async function runPhone(argv: readonly string[], io: PhoneIo): Promise<nu
         /* Les messages déjà lus ne reviennent pas au pivot. */
         await api.call("getUpdates", { offset, timeout: 0 }).catch(() => undefined);
         await welcome(api, message.chat.id, io.script).catch(() => undefined);
-        io.out(`✓ Paired: requests from your agents now reach your phone (@${bot}), with Approve and Reject.`);
+        io.out(`✓ Paired: requests from your agents now reach your phone (@${bot}): you answer yes or no.`);
         io.out("  On your phone, set Oathrion's sound for this chat: the bot just sent it, with how.");
         io.out('  "oathrion phone test" sends a test; "oathrion phone off" unpairs.');
         return 0;

@@ -5,6 +5,7 @@
  * affiché dessous, tel quel. Partagé (16 novembre) : la notification dit la même chose que la
  * console (`server/notifications/desktop.ts`).
  */
+import { friendlyAsk, type FriendlyAsk } from "./friendly-words";
 import type { Approval } from "./types";
 
 export interface ApprovalText {
@@ -70,6 +71,25 @@ export interface NotificationWords {
   content: string | null;
   /** Pourquoi on vous demande : la règle, ou la session qui a lu du contenu non fiable. */
   why: string | null;
+  /** La même demande, dite par l'agent comme un ami (`shared/friendly-words.ts`) : la question, ce que ça change, le code. */
+  friendly?: FriendlyAsk;
+}
+
+/** La demande dite par l'agent comme un ami : « Can I publish your code to the shared repository? ». */
+export function friendlyApproval(approval: Pick<Approval, "agentName" | "title" | "context" | "requestedValue">): FriendlyAsk {
+  const context = approval.context ?? [];
+  const row = (label: string) => context.find((c) => c.label === label)?.value ?? null;
+  const text = describeApproval(approval);
+  const shown = text.details.filter((d) => d.value.trim() !== "");
+  const content = text.command ?? (shown.length === 1 ? shown[0]!.value : shown.length > 1 ? shown.map((d) => `${d.label}: ${d.value}`).join(" · ") : null);
+  return friendlyAsk({
+    action: row("Action") ?? approval.title.split(" · ")[0]!.replace(/ /g, "_"),
+    target: row("Target"),
+    command: row("command") ?? row("arguments.command"),
+    reason: row("reason"),
+    untrusted: row("untrusted"),
+    content: content ? (content.length > 160 ? `${content.slice(0, 157)}…` : content) : null,
+  });
 }
 
 export function notificationWords(approval: Pick<Approval, "agentName" | "title" | "context" | "requestedValue">, policyName: string | null): NotificationWords {
@@ -85,5 +105,6 @@ export function notificationWords(approval: Pick<Approval, "agentName" | "title"
     headline: [text.headline, text.where].filter(Boolean).join(" "),
     content: content ? (content.length > 160 ? `${content.slice(0, 157)}…` : content) : null,
     why: why ? why.replace(/\.$/, "") : null,
+    friendly: friendlyApproval(approval),
   };
 }

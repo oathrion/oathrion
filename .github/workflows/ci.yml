@@ -91,6 +91,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The phone relay (`relay/`) is its own package, with its own lockfile: the typecheck and
+      # its tests read `relay/src/node.ts`, which needs `ws`. Without this step they fail on a
+      # missing module (24 November 2026).
+      - name: Install the phone relay's dependencies
+        run: npm ci --prefix relay
+
       # Run as separate steps rather than the single `npm run verify` script, even though
       # verify chains the same four commands. The reason is diagnosis: verify stops at the
       # first failure and the log shows one wall of output, whereas separate steps name

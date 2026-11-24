@@ -1,23 +1,25 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Bell, Menu, Moon, Search, Sun, X } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { GlobalSearch } from "@/components/layout/GlobalSearch";
 import { useTheme } from "@/lib/theme";
+import { useLocalMode } from "@/lib/local-mode";
 import { useARIA } from "@/lib/store";
 import { getOrganization } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const TITLES: { match: (p: string) => boolean; label: string }[] = [
   { match: (p) => p === "/" || p.startsWith("/onboarding"), label: "Get started" },
-  { match: (p) => p.startsWith("/home"), label: "Home" },
+  { match: (p) => p.startsWith("/home"), label: "Passports" },
+  { match: (p) => p.startsWith("/passport/"), label: "Passport" },
   { match: (p) => p.startsWith("/share"), label: "Share" },
   { match: (p) => p.startsWith("/dashboard"), label: "Dashboard" },
   { match: (p) => p.startsWith("/agents"), label: "Agents" },
   { match: (p) => p.startsWith("/executions"), label: "Executions" },
   { match: (p) => p.startsWith("/policies"), label: "Policies" },
-  { match: (p) => p.startsWith("/approvals"), label: "Approvals" },
+  { match: (p) => p.startsWith("/approvals"), label: "Decisions" },
   { match: (p) => p.startsWith("/firewall"), label: "Firewall" },
   { match: (p) => p.startsWith("/coverage"), label: "Coverage" },
   { match: (p) => p.startsWith("/connectors"), label: "Connectors" },
@@ -26,7 +28,7 @@ const TITLES: { match: (p: string) => boolean; label: string }[] = [
   { match: (p) => p.startsWith("/feedback"), label: "Feedback" },
   { match: (p) => p.startsWith("/settings"), label: "Settings" },
   { match: (p) => p.startsWith("/activity"), label: "Activity" },
-  { match: (p) => p.startsWith("/protection"), label: "Protection" },
+  { match: (p) => p.startsWith("/protection"), label: "This machine" },
   { match: (p) => p.startsWith("/mandates"), label: "Mandates" },
   { match: (p) => p.startsWith("/servers"), label: "Servers" },
   { match: (p) => p.startsWith("/team"), label: "Your team" },
@@ -38,6 +40,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [location] = useLocation();
   const { theme, toggle } = useTheme();
+  /* En local, la console a le style du passeport, sombre (23 novembre) : pas de thème clair. */
+  const local = useLocalMode();
+  /* Les fenêtres ouvertes par-dessus (partage, choix de mascotte, notifications) vivent hors de la coque : la page entière prend le style. */
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle("passport", local);
+    if (local) root.classList.add("dark");
+  }, [local, theme]);
   const { approvals } = useARIA();
   const pending = approvals.filter((a) => a.status === "pending").length;
   const crumb = TITLES.find((t) => t.match(location))?.label ?? "Oathrion";
@@ -48,7 +58,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const organization = useQuery({ queryKey: ["/api/organization"], queryFn: getOrganization });
 
   return (
-    <div className="oath-backdrop flex h-screen w-full overflow-hidden bg-background text-foreground">
+    <div className={cn("oath-backdrop relative flex h-screen w-full overflow-hidden bg-background text-foreground", local && "passport dark")}>
+      {local ? <div className="passport-beams" aria-hidden="true" /> : null}
       {/* Desktop sidebar */}
       <div className="hidden md:block">
         <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
@@ -116,14 +127,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               )}
             </Link>
 
-            <button
+            {local ? null : <button
               onClick={toggle}
               aria-label="Change theme"
               data-testid="button-toggle-theme"
               className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
             >
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </button>
+            </button>}
           </div>
         </header>
 

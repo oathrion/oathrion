@@ -48,13 +48,13 @@ describe.skipIf(!ready || process.platform !== "linux")("prévenir l'approbateur
 
     await until(() => existsSync(opened), 15_000, "la console ouverte par « Décider »");
     const args = readFileSync(notified, "utf8");
-    /* Quoi, sur quoi, et pourquoi (16 novembre) : les mots de la console. */
-    expect(args).toContain("Cursor wants to create note on the carnet server");
-    expect(args).toContain("“à approuver”");
-    expect(args).toMatch(/Why: your rule “carnet: every write waits for approval”\./);
-    /* La notification qui décide : « Approve » / « Reject », et le corps qui ouvre la console. */
-    expect(args).toContain("--action=approve=Approve");
-    expect(args).toContain("--action=reject=Reject");
+    /* L'agent écrit comme un ami (23 novembre) : son nom, sa question, ce qu'il enverra. */
+    expect(args).toContain("Can I create a note?");
+    expect(args).toContain("on carnet: à approuver");
+    expect(args).not.toMatch(/rule|Why:/);
+    /* La notification qui décide : « Yes, go ahead » / « No », et le corps qui ouvre la console. */
+    expect(args).toContain("--action=approve=Yes, go ahead");
+    expect(args).toContain("--action=reject=No");
     expect(args).toContain("--action=default=Open the console");
 
     const url = readFileSync(opened, "utf8").trim();
@@ -90,7 +90,7 @@ describe.skipIf(!ready || process.platform !== "linux")("prévenir l'approbateur
     expect(JSON.parse(readFileSync(feedback, "utf8").trim().split("\n")[0]!)).toMatchObject({ decision: "Approved: the action ran", right: true });
     /* La question du feedback garde son titre : pas celui, générique, d'une demande. */
     const lines = readFileSync(notified, "utf8").split("\n");
-    expect(lines).toContain("Approved: the action ran. Was Oathrion right?");
+    expect(lines).toContain("Thanks, I'm going ahead. Was Oathrion right?");
     expect(lines).not.toContain("Oathrion is waiting for your decision");
     expect(await client.close()).toBe(0);
   }, 60_000);
@@ -126,7 +126,7 @@ describe.skipIf(!ready || process.platform !== "linux")("prévenir l'approbateur
 
     await client.ask("tools/call", { name: "create_note", arguments: { text: "question ignorée" } });
     await until(() => existsSync(notified), 10_000, "la notification après le délai");
-    expect(readFileSync(notified, "utf8")).toContain("Claude Code wants to create note on the carnet server");
+    expect(readFileSync(notified, "utf8")).toContain("Can I create a note?");
     expect(await client.close()).toBe(0);
   }, 60_000);
 });

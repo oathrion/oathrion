@@ -22,6 +22,7 @@ import { shareUrl } from "@shared/share";
 import { mintDecideToken } from "./local-decide-links";
 import { untilClock, type HourPasses } from "./local-hour-passes";
 import type { DecisionDesk } from "./local-decisions";
+import { relayPhoneFor, type RelayPhoneOptions } from "./local-phone-relay";
 import { TelegramPhone } from "./local-telegram";
 
 import { coalesced } from "./notifications/coalesce";
@@ -251,6 +252,8 @@ export function registerLocalNotifications(
     phone?: boolean;
     /** Pour les essais : un faux Telegram, et un faux lecteur de son. */
     phoneFetch?: typeof fetch;
+    /** Pour les essais : le relais du téléphone (`local-phone-relay.ts`), sa classe WebSocket. */
+    relay?: RelayPhoneOptions;
     play?: (file: string) => void;
     /** Garder une carte à partager, que la console ouvrira (`LocalHub.keepShareCard`) ; rend son jeton. */
     keepShareCard?: (card: { sentence: string; mascot: { id: string; name: string }; at: string; tone: "good" | "warn" | "bad" | "info" }) => string;
@@ -371,7 +374,46 @@ export function registerLocalNotifications(
    * LE TÉLÉPHONE (12 novembre, `local-telegram.ts`) : la machine peut rester à la maison, sans
    * écran — la demande arrive sur Telegram, avec la mascotte et ses boutons, partout.
    */
-  const phone = options.phone === false || process.env.OATHRION_LOCAL_NOTIFY_PHONE === "0" ? null : new TelegramPhone({ dir: options.stateDir, act: actFrom("phone"), feedback, text: (event) => desktopText(event, { content: false }), ...(options.phoneFetch ? { fetchImpl: options.phoneFetch } : {}) });
+  /*
+   * 23 novembre (`local-phone-relay.ts`) : le robot officiel, joint par le relais d'Oathrion — un
+   * scan pour l'appairer. Les deux canaux vivent côte à côte : celui qui est appairé sert.
+   */
+  const phoneText = (event: NotificationEvent) => desktopText(event, { content: false });
+  const phones =
+    options.phone === false || process.env.OATHRION_LOCAL_NOTIFY_PHONE === "0"
+      ? []
+      : [
+          new TelegramPhone({ dir: options.stateDir, act: actFrom("phone"), feedback, text: phoneText, ...(options.phoneFetch ? { fetchImpl: options.phoneFetch } : {}) }),
+          relayPhoneFor(options.stateDir, options.relay).bind({ act: actFrom("phone"), feedback, text: phoneText }),
+        ];
+  const phone =
+    phones.length === 0
+      ? null
+      : {
+          get configured() {
+            return phones.some((p) => p.configured);
+          },
+          start: () => phones.forEach((p) => p.start()),
+          stop: () => phones.forEach((p) => p.stop()),
+          deliver: async (event: NotificationEvent) => {
+            /* L'un des deux qui échoue n'empêche pas l'autre ; seule l'erreur d'un canal seul remonte. */
+            let ok = false;
+            let failure: unknown = null;
+            for (const p of phones) {
+              if (!p.configured) continue;
+              try {
+                ok = (await p.deliver(event)) || ok;
+              } catch (error) {
+                failure ??= error;
+              }
+            }
+            if (!ok && failure) throw failure;
+            return ok;
+          },
+          settled: async (eventId: string, text: string) => {
+            await Promise.all(phones.map((p) => p.settled(eventId, text).catch(() => undefined)));
+          },
+        };
   if (phone) {
     phone.start();
     process.once("exit", () => phone.stop());

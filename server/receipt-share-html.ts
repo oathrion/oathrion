@@ -16,6 +16,8 @@
 import { REPOSITORY_URL, contactReady } from "@shared/contact";
 import { embedShared, type SharedReceipt } from "@shared/receipt-share";
 
+import { PHONE_CHECK_JS } from "./phone-approval-page";
+
 const STYLE = `
 :root{
   --page:#f5f5f7;--card:#fff;--ink:#1d1d1f;--soft:#6e6e73;--faint:#86868b;--hair:rgba(0,0,0,.08);--well:#f5f5f7;
@@ -48,9 +50,23 @@ body{background:var(--page);color:var(--ink);font:15px/1.47 -apple-system,BlinkM
 .vtext{color:var(--soft);font-size:13px;max-width:340px;margin:4px auto 0}
 h1{font-size:24px;line-height:1.2;font-weight:700;letter-spacing:-.025em;margin:10px auto 6px;max-width:360px}
 .sub{color:var(--soft);font-size:15px;max-width:360px;margin:0 auto}
+.todo{margin:18px 28px 0;font-size:18px;font-weight:600;line-height:1.35;text-align:center;overflow-wrap:anywhere}
+.todo[hidden]{display:none}
+details.exact{margin:10px 28px 0}
+details.exact>summary{list-style:none;cursor:pointer;color:var(--soft);font-size:13px;text-align:center}
+details.exact>summary::-webkit-details-marker{display:none}
+details.exact>summary::after{content:" ›";display:inline-block;transition:transform .15s}
+details.exact[open]>summary::after{transform:rotate(90deg)}
+details.exact .command{margin:8px 0 0}
 .command{margin:22px 28px 0;background:var(--well);border-radius:14px;padding:14px 16px;font-size:13.5px;line-height:1.5;overflow-wrap:anywhere;white-space:pre-wrap}
 .spared{margin:12px 28px 0;border-radius:14px;padding:12px 16px;background:var(--bad-tint);color:var(--bad);font-weight:600;font-size:14px;display:flex;gap:10px;align-items:center}
 .spared[hidden]{display:none}
+.phone{margin:12px 28px 0;border-radius:14px;padding:12px 16px;background:var(--well);font-size:14px;display:flex;gap:10px;align-items:flex-start}
+.phone[hidden]{display:none}
+.phone b{display:block}
+.phone .said{color:var(--soft);font-size:13px;margin-top:2px;overflow-wrap:anywhere}
+.phone .state{font-size:12.5px;font-weight:600;margin-top:4px;color:var(--wait)}
+.phone .state.ok{color:var(--ok)}.phone .state.bad{color:var(--bad)}
 .list{margin:20px 28px 0}
 .row{display:flex;justify-content:space-between;gap:16px;padding:12px 0;border-top:1px solid var(--hair);font-size:14px}
 .row:first-child{border-top:0}
@@ -68,10 +84,11 @@ h1{font-size:24px;line-height:1.2;font-weight:700;letter-spacing:-.025em;margin:
 .verify{margin-top:18px;display:flex;align-items:center;gap:8px;background:var(--well);border-radius:12px;padding:10px 10px 10px 14px;font-size:12.5px}
 .verify code{flex:1;min-width:0;overflow-x:auto;white-space:nowrap}
 .verify button{flex:none;border:0;border-radius:8px;padding:6px 12px;font-family:inherit;font-weight:600;font-size:12.5px;background:var(--card);color:var(--ink);cursor:pointer;box-shadow:0 0 0 1px var(--hair)}
-.pass.untrusted .command,.pass.untrusted .spared,.pass.untrusted .list,.pass.untrusted h1,.pass.untrusted #sub{opacity:.45;text-decoration:line-through;text-decoration-thickness:1px}
+.pass.untrusted .todo,.pass.untrusted .command,.pass.untrusted .spared,.pass.untrusted .list,.pass.untrusted h1,.pass.untrusted #sub{opacity:.45;text-decoration:line-through;text-decoration-thickness:1px}
 .foot{max-width:460px;margin:20px auto 0;text-align:center;color:var(--faint);font-size:12px}
-@media (max-width:420px){body{padding:16px 12px 40px}.head,.hero{padding-left:20px;padding-right:20px}.command,.spared,.list{margin-left:20px;margin-right:20px}.proof{padding:0 20px 24px}h1{font-size:21px}}
-@media print{body{background:#fff;padding:0}.pass{box-shadow:none;border:1px solid #ddd}.verify button{display:none}.tear span{background:#fff}}
+@media (max-width:420px){body{padding:16px 12px 40px}.head,.hero{padding-left:20px;padding-right:20px}.todo,details.exact,.spared,.list{margin-left:20px;margin-right:20px}.proof{padding:0 20px 24px}h1{font-size:21px}}
+@media print{.seal{animation:none!important}}
+@media print{details.exact>summary::after{display:none}body{background:#fff;padding:0}.pass{box-shadow:none;border:1px solid #ddd}.verify button{display:none}.tear span{background:#fff}}
 `;
 
 const LOGO = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2.5 4.5 5.6v6.1c0 4.6 3.1 8.5 7.5 9.8 4.4-1.3 7.5-5.2 7.5-9.8V5.6L12 2.5Z" fill="currentColor" opacity=".18"/><path d="M12 2.5 4.5 5.6v6.1c0 4.6 3.1 8.5 7.5 9.8 4.4-1.3 7.5-5.2 7.5-9.8V5.6L12 2.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m8.6 12.2 2.4 2.4 4.6-4.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -89,7 +106,7 @@ const SCRIPT = `
     return "{" + Object.keys(v).filter(function(k){ return v[k] !== undefined; }).sort().map(function(k){ return JSON.stringify(k) + ":" + canonical(v[k]); }).join(",") + "}";
   }
   function bytes(b64){ var bin = atob(b64), out = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; }
-  function when(iso){ try { return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }); } catch (x) { return iso; } }
+  function when(iso){ try { return new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }); } catch (x) { return iso; } }
   /* Une phrase en langage courant, tirée de l'issue enregistrée ; rien de plus que ce qu'elle dit. */
   var HEADLINES = {
     "refused": ["Oathrion stopped this action.", "It never ran."],
@@ -106,9 +123,12 @@ const SCRIPT = `
     "not-run": ["Oathrion let this action through.", "It did not run."],
     "running": ["This action was running.", "Its outcome was not known yet."]
   };
+  ${PHONE_CHECK_JS}
   var head = HEADLINES[a.outcome] || [a.outcomeLabel, ""];
   set("headline", head[0]); set("sub", a.agent + " \\u00b7 " + head[1]);
-  set("what", a.what); set("agent", a.agent); set("via", a.via); set("at", when(a.at)); set("outcome", a.outcomeLabel);
+  set("what", a.what); set("agent", a.agent);
+  /* L'action en mots simples d'abord ; la commande exacte repliée dessous (un reçu ancien, sans ces mots : la commande ouverte). */
+  if (a.todo) { $("todo").textContent = a.todo.charAt(0).toUpperCase() + a.todo.slice(1); $("todo").hidden = false; } else $("exact").open = true; set("via", a.via); set("at", when(a.at)); set("outcome", a.outcomeLabel);
   set("detail", a.detail); set("ref", a.ref);
   if (a.impact) { set("impact", "Would have deleted " + a.impact); $("spared").hidden = false; }
   set("issuer", s.issuer.name); set("issued", when(s.issuedAt));
@@ -133,8 +153,20 @@ const SCRIPT = `
     return crypto.subtle.importKey("raw", raw, { name: "Ed25519" }, false, ["verify"]).then(function(key){
       return crypto.subtle.verify({ name: "Ed25519" }, key, bytes(shared.signature), new TextEncoder().encode(canonical(s)));
     }).then(function(ok){
-      if (ok) verdict(true, "Verified", "Not a single character has changed since it was signed by the key below. Compare its fingerprint with the one the sender published.");
-      else { verdict(false, "Altered", "This receipt was changed after it was signed. Do not trust what it says."); document.querySelector(".pass").classList.add("untrusted"); }
+      if (!ok) { verdict(false, "Altered", "This receipt was changed after it was signed. Do not trust what it says."); document.querySelector(".pass").classList.add("untrusted"); return; }
+      verdict(true, "Verified", "Not a single character has changed since it was signed by the key below. Compare its fingerprint with the one the sender published.");
+      if (!s.approval) return;
+      /* La réponse de la personne, signée par SON téléphone : une seconde signature, revérifiée ici. */
+      var p = s.approval;
+      $("phone").hidden = false;
+      set("phone-said", choiceLabel(p.choice) + " on " + (p.device.label || "a paired phone") + " \u00b7 " + when(new Date(p.at).toISOString()));
+      set("phone-shown", "It showed: \u201c" + p.shown.title + "\u201d");
+      return checkPhone(p).then(function(good){
+        var state = $("phone-state");
+        state.className = "state " + (good ? "ok" : "bad");
+        state.textContent = good ? "The phone's own signature checks \u00b7 key " + p.device.fingerprint : "The phone's signature does NOT check";
+        if (!good) { verdict(false, "Not valid", "The receipt is signed, but the phone's approval inside it is not. Do not trust it."); document.querySelector(".pass").classList.add("untrusted"); }
+      });
     });
   }).catch(function(){ verdict(false, UNABLE[0], UNABLE[1]); });
 })();
@@ -160,7 +192,9 @@ export function receiptHtml(shared: SharedReceipt): string {
     <h1 id="headline">…</h1>
     <p class="sub" id="sub"></p>
   </section>
-  <div class="command mono" id="what"></div>
+  <p class="todo" id="todo" hidden></p>
+  <details class="exact" id="exact"><summary>Show the exact command</summary><div class="command mono" id="what"></div></details>
+  <div class="phone" id="phone" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="flex:none;margin-top:2px"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M10.5 18.5h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><div><b id="phone-said"></b><div class="said" id="phone-shown"></div><div class="state" id="phone-state">Checking the phone's signature…</div></div></div>
   <div class="spared" id="spared" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 10v4.5M12 17.2v.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span id="impact"></span></div>
   <dl class="list">
     <div class="row"><dt>Agent</dt><dd id="agent"></dd></div>

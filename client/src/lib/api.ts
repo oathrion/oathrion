@@ -790,6 +790,86 @@ export async function getFeed(): Promise<FeedItem[]> {
   return get<FeedItem[]>("/api/local/feed");
 }
 
+/** Le passeport d'un agent, non signé, pour la console (`server/local-passport.ts`). */
+export interface AgentPassport {
+  agent: { name: string; firstSeen: string | null; lastSeen: string | null; program: { executable: string; sha256: string; platform: string; admittedAt: string | null; updates: number } | null };
+  period: { since: string; until: string };
+  record: { total: number; passed: number; asked: number; approvedByPerson: number; refusedByPerson: number; waiting: number; blocked: number };
+  tools: { tool: string; total: number; asked: number; blocked: number }[];
+  rules: { rule: string; asked: number; blocked: number }[];
+  hookRules: { inForce: string[]; off: string[]; extraDeny: number; extraAsk: number } | null;
+  lastStopped: { at: string; agent: string; what: string; rule: string | null; impact: string | null; ref: string } | null;
+  evidence: { receipts: { intact: boolean; entries: number }; journal: { intact: boolean; entries: number }; intact: boolean };
+}
+
+export interface PassportEntry {
+  agent: string;
+  face: { id: string; name: string };
+  passport: AgentPassport;
+}
+
+export async function getPassports(days = 7): Promise<{ since: string; until: string; passports: PassportEntry[] }> {
+  return get<{ since: string; until: string; passports: PassportEntry[] }>(`/api/local/passports?days=${String(days)}`);
+}
+
+/** Le passeport signé d'un agent, tel qu'on le remet à qui le demande : une page qui se vérifie seule. */
+export async function getSignedPassport(agent: string, days = 30): Promise<string> {
+  const res = await apiRequest("GET", `/api/local/passports/share?agent=${encodeURIComponent(agent)}&days=${String(days)}`);
+  return res.text();
+}
+
+/** « Send proof → A client » : le relevé d'un dossier et de serveurs, sur une période (`server/local-report.ts`). */
+export interface StatementQuery {
+  project: string | null;
+  servers: string[];
+  days: number;
+  for: string;
+}
+
+export interface StatementOptions {
+  projects: { path: string; display: string; actions: number }[];
+  servers: string[];
+}
+
+export interface StatementDecision {
+  at: string;
+  agent: string;
+  what: string;
+  outcomeLabel: string;
+  ref: string;
+  approval: PhoneApprovalView | null;
+}
+
+export interface StatementPreview {
+  subject: string | null;
+  scope?: { project: string | null; servers: string[] };
+  period: { since: string; until: string };
+  summary: { total: number; passed: number; asked: number; approvedByPerson: number; refusedByPerson: number; waiting: number; blocked: number; signedByPhone?: number };
+  decisions?: StatementDecision[] | null;
+  decisionsTruncated?: number;
+  saves: { at: string; agent: string; what: string; rule: string | null; impact: string | null; ref: string }[] | null;
+  agents: { agent: string; total: number; asked: number; blocked: number }[];
+  evidence: { intact: boolean };
+  limits: string[];
+}
+
+const statementParams = (query: StatementQuery) =>
+  new URLSearchParams({ ...(query.project ? { project: query.project } : {}), ...(query.servers.length > 0 ? { servers: query.servers.join(",") } : {}), days: String(query.days), ...(query.for.trim() ? { for: query.for.trim() } : {}) }).toString();
+
+export async function getStatementOptions(): Promise<StatementOptions> {
+  return get<StatementOptions>("/api/local/statement/options");
+}
+
+export async function getStatementPreview(query: StatementQuery): Promise<StatementPreview> {
+  return get<StatementPreview>(`/api/local/statement?${statementParams(query)}`);
+}
+
+/** Le relevé signé : la page HTML qui se vérifie seule, à télécharger puis à envoyer soi-même. */
+export async function getSignedStatement(query: StatementQuery): Promise<string> {
+  const res = await apiRequest("GET", `/api/local/statement/share?${statementParams(query)}`);
+  return res.text();
+}
+
 /** L'état des protections de la machine (`/api/local/settings`). */
 /** Une carte à partager, ouverte depuis la notification. */
 export interface ShareCard {
@@ -831,7 +911,8 @@ export async function shareDecision(id: string, network: string): Promise<{ toke
 
 /** « Prêt à X/5 » : ce que la personne a déjà fait pour être bien protégée (`/api/local/readiness`). */
 export interface Readiness {
-  steps: { id: "protected" | "demo" | "phone" | "named" | "decision"; done: boolean; count?: number; connected?: number; bot?: string | null; optional?: boolean }[];
+  /** `device` : le téléphone appairé par ses notifications (le Web Push) ; `bot` : par Telegram. */
+  steps: { id: "protected" | "demo" | "phone" | "named" | "decision"; done: boolean; count?: number; connected?: number; bot?: string | null; device?: string; optional?: boolean }[];
 }
 
 export async function getReadiness(): Promise<Readiness> {
@@ -859,7 +940,8 @@ export async function chooseMascot(agent: string, mascot: string, nickname: stri
 
 export interface LocalSettings {
   notifications: { desktop: boolean; slack: boolean };
-  phone?: { paired: boolean; bot: string | null };
+  /** `via` : le robot officiel par le relais (`relay`), ou son propre robot (`own-bot`). */
+  phone?: { paired: boolean; bot: string | null; via?: "relay" | "own-bot" | null; kind?: "web" | "telegram"; account?: string | null };
   platform?: string;
   watch: { on: boolean };
   jail: { agents: string[] };
@@ -1232,6 +1314,35 @@ export async function testPhone(): Promise<void> {
   await apiRequest("POST", "/api/local/phone/test", {});
 }
 
+/** Le téléphone en un scan : le robot officiel, par le relais d'Oathrion (`server/local-phone-relay.ts`). */
+export type RelayPairing =
+  | { state: "unavailable"; message: string }
+  | { state: "idle"; notice?: string }
+  | { state: "connecting" }
+  /** `seen` : le téléphone a ouvert la page ; `lastAt` : la dernière notification partie. */
+  | { state: "waiting"; kind: "web" | "telegram"; bot: string; link: string; code: string; until: string; qr: { size: number; cells: string }; seen?: boolean }
+  | { state: "paired"; kind: "web" | "telegram"; bot: string; account: string; online: boolean; lastAt?: string }
+  | { state: "expired" }
+  | { state: "failed"; message: string };
+
+export async function getRelayPairing(): Promise<RelayPairing> {
+  return get<RelayPairing>("/api/local/phone/relay");
+}
+
+export async function startRelayPairing(): Promise<RelayPairing> {
+  const res = await apiRequest("POST", "/api/local/phone/relay/pair", {});
+  return (await res.json()) as RelayPairing;
+}
+
+export async function unpairRelay(): Promise<RelayPairing> {
+  const res = await apiRequest("POST", "/api/local/phone/relay/unpair", {});
+  return (await res.json()) as RelayPairing;
+}
+
+export async function testRelayPhone(): Promise<void> {
+  await apiRequest("POST", "/api/local/phone/relay/test", {});
+}
+
 /** « Allow 1 hour » : cet agent, cet outil, une heure sans redemander (`server/local-hour-passes.ts`). */
 export async function grantHour(approvalId: string): Promise<{ ok: true; clock: string } | { ok: false; message: string }> {
   const res = await apiRequestAllowingFailure("POST", "/api/local/hour-pass", { approvalId });
@@ -1267,6 +1378,16 @@ export interface ActivityEntry {
   ref: string;
   /** Une suppression refusée : ce qu'elle aurait effacé. */
   impact?: string;
+  /** La réponse de la personne, signée par son téléphone (`shared/phone-approval.ts`). */
+  phone?: PhoneApprovalView;
+}
+
+/** Ce que la console montre d'un accord signé par un téléphone. */
+export interface PhoneApprovalView {
+  device: { fingerprint: string; label: string };
+  shown: { title: string; body: string; at: number };
+  choice: string;
+  at: number;
 }
 
 export interface LocalActivity {

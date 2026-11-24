@@ -13,7 +13,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Download, FileCheck2, History, ShieldAlert, ShieldCheck, ShieldX } from "lucide-react";
+import { Download, FileCheck2, History, ShieldAlert, ShieldCheck, ShieldX, Smartphone } from "lucide-react";
 
 import { Pill } from "@/components/common/badges";
 import { EmptyState, ErrorState, PageHeader, Surface, TableSkeleton } from "@/components/common/primitives";
@@ -78,7 +78,23 @@ function ShareReceipt({ entry }: { entry: ActivityEntry }) {
   );
 }
 
-function Row({ entry }: { entry: ActivityEntry }) {
+/** Les réponses d'une personne : sur quoi elles ont été données. Signée par un téléphone, elle porte une preuve que la machine ne peut pas fabriquer. */
+const PERSON_DECIDED: ReadonlySet<ActivityOutcome> = new Set(["approved-done", "approved-failed", "approved-not-run", "refused-by-person"]);
+
+function DecidedOn({ entry }: { entry: ActivityEntry }) {
+  if (entry.phone) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#46e3d2]" title={`The phone showed: « ${entry.phone.shown.title} » · key ${entry.phone.device.fingerprint}`} data-testid={`signed-phone-${entry.ref}`}>
+        <Smartphone className="h-3 w-3" aria-hidden="true" />
+        Signed on {entry.phone.device.label || "your phone"}
+      </span>
+    );
+  }
+  if (!PERSON_DECIDED.has(entry.outcome)) return null;
+  return <span className="text-[11.5px] text-muted-foreground">No phone signature</span>;
+}
+
+export function ActivityRow({ entry }: { entry: ActivityEntry }) {
   const outcome = OUTCOME[entry.outcome];
   return (
     <li className="grid gap-1 border-b border-border px-4 py-3 last:border-b-0 md:grid-cols-[7rem_8rem_1fr_auto_auto] md:items-center md:gap-4" data-testid={`activity-${entry.ref}`}>
@@ -96,9 +112,12 @@ function Row({ entry }: { entry: ActivityEntry }) {
           </p>
         ) : null}
       </div>
-      <Pill tone={outcome.tone} dot>
-        {outcome.label}
-      </Pill>
+      <div className="flex flex-col items-start gap-1">
+        <Pill tone={outcome.tone} dot>
+          {outcome.label}
+        </Pill>
+        <DecidedOn entry={entry} />
+      </div>
       <ShareReceipt entry={entry} />
     </li>
   );
@@ -303,7 +322,7 @@ export default function ActivityPage() {
             <Surface className="p-0">
               <ul aria-label="Agent activity">
                 {data.entries.map((entry) => (
-                  <Row key={`${entry.source}-${entry.ref}`} entry={entry} />
+                  <ActivityRow key={`${entry.source}-${entry.ref}`} entry={entry} />
                 ))}
               </ul>
             </Surface>

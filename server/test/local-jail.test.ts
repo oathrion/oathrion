@@ -267,4 +267,18 @@ describe("signé avec le secret de session (dehors)", () => {
     expect(unknown.status).toBe(404);
     expect(unknown.body.agents).toContain("Claude Code");
   });
+
+  it("la console lit les passeports de chaque agent, et télécharge le passeport signé", async () => {
+    const { verifyShared, PASSPORT_TYPE } = await import("@shared/receipt-share");
+    const listed = await api.get<{ passports: { agent: string; face: { id: string; name: string }; passport: { record: { total: number; blocked: number }; agent: { name: string } } }[] }>("/api/local/passports?days=7");
+    expect(listed.status).toBe(200);
+    const claude = listed.body.passports.find((p) => p.agent === "Claude Code");
+    expect(claude?.face.id).toMatch(/^[a-z]+$/);
+    expect(claude?.passport.record.blocked).toBeGreaterThanOrEqual(1);
+    const signed = await api.get<Record<string, unknown>>("/api/local/passports/share?agent=Claude%20Code&format=json");
+    expect(signed.status).toBe(200);
+    expect(verifyShared(signed.body)).toMatchObject({ ok: true });
+    expect((signed.body.statement as { type: string }).type).toBe(PASSPORT_TYPE);
+    expect((await api.get("/api/local/passports/share?agent=Devin")).status).toBe(404);
+  });
 });

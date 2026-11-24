@@ -16,8 +16,14 @@ you can decide before you rely on it. The technical detail, with the reasons, is
 - **It does not solve prompt injection.** It does not detect injected instructions. When Claude Code has read a web page, a search, an issue or a message, the rest of its session's outgoing actions ask a person, saying where it read from; the provenance is lost if the content is copied into a file another session reads. With decoys planted (`oathrion decoys plant`), a fake secret that shows up in what the agent sends is refused — a sign it was tricked — but a decoy sent encoded or split is not recognised. It bounds what a tricked agent can do — a refund
   ceiling holds whether or not the agent was fooled — and that is a smaller promise.
 - **It cannot undo an action already taken at a provider**, and it cannot revoke a token there.
-- **It cannot prove to a third party that it wrote a receipt.** The chain shows that nothing
-  was edited, removed or reordered since. There is no signature and no external anchor.
+- **A signed receipt does not prove who held the key.** On your machine, receipts,
+  statements and reports are signed with your computer's key, and a decision made on your
+  phone also carries the phone's own signature; anyone can check them with
+  `npx oathrion receipt verify`, without trusting us. They prove which key signed and that
+  nothing changed since. They do not prove who held the key: your computer's key sits in
+  `~/.oathrion`, readable by anything that runs as you. There is no external anchor, so the
+  time is your computer's clock. On the team server, the receipt chain is not signed yet: it
+  shows that nothing was edited, removed or reordered, not who wrote it.
 - **It cannot erase one person from a live organization.** The person's name is inside the
   chained receipts, so erasing it would look like tampering. A whole organization can be
   erased.
@@ -28,13 +34,18 @@ you can decide before you rely on it. The technical detail, with the reasons, is
   and not that one » for a wrapped server. Its classification of tools is a cautious guess
   that you correct rule by rule, and pinning tool definitions does not catch a server that
   keeps its declaration but changes what it does.
-- **`oathrion wrap` does not let you approve from your phone.** It can tell you on Slack, but
-  the console listens only on your machine: you decide there, or in your client. Approving
-  from Slack is part of the team version, with a shared Oathrion.
+- **Your phone decides only while your computer is on and online.** The request lives on your
+  computer; the phone is paired in one scan (console → « Pair my phone ») and
+  reached through Oathrion's relay, or your own Telegram bot. Notifications have no buttons
+  by default (Chrome on Android flags those as possible spam): tapping one opens the page
+  where you decide. On iPhone, add that page to your home screen first. Approving from Slack
+  is part of the team version, with a shared Oathrion.
 - **`oathrion wrap` does not contain an agent that can read your files.** It governs the
   MCP server it wraps, nothing else: your client's own shell and file tools go around it, and
   an agent that can read `~/.oathrion` can read the secret that signs console sessions and
-  approve its own actions. See [what it does not do](wrap.md#what-it-does-not-do).
+  approve its own actions on your computer. It cannot make your phone's signature: that key
+  never leaves the phone. Each decision says which it was, « Signed on <your phone> » or
+  « No phone signature ». See [what it does not do](wrap.md#what-it-does-not-do).
 - **It is not hosted.** You run it yourself: on your machine with `oathrion wrap`, or on your
   servers.
 - **Four connectors only:** GitHub, Slack, Linear, Stripe. Anything else goes through an MCP
@@ -52,10 +63,12 @@ you can decide before you rely on it. The technical detail, with the reasons, is
 
 ## It has not proven
 
-- **That clients other than Cursor work.** Claude Code announces that it can ask for an
-  approval inside the client, and its exact opening sequence is replayed in the tests; it has
-  not been seen yet in front of a person. Claude Desktop has not been verified.
-- **`npx oathrion` and `oathrion wrap` on macOS and Windows.** They are verified on Linux.
+- **That every client works.** Claude Code is used every day by the person who builds
+  Oathrion, with its hook and the phone, and Cursor was verified before it; no outside team
+  uses either with Oathrion yet. Claude Desktop has not been verified.
+- **`npx oathrion` and `oathrion wrap` in front of a person on macOS and Windows.** At every
+  change, a machine of each system installs the package, protects a server, opens the
+  console and undoes it all (the `visitor` job of the CI); nobody has used it there yet.
   The « Decide » button (a dialog on macOS, a Windows notification) is tested against a
   fake launcher only.
   On Windows, `npx oathrion` writes the `cmd /c npx …` form that Claude Code documents for
@@ -63,8 +76,9 @@ you can decide before you rely on it. The technical detail, with the reasons, is
   `claude` command on the `PATH`; if it is missing, `npx oathrion` says so and leaves those
   servers as they are.
 - **The local Oathrion for 12 hours.** The team server has run 12 hours without an error;
-  the local one, behind `npx oathrion`, has run one hour on its endurance bench without an
-  error (17,989 calls, `script/endurance-pivot.mjs`).
+  the local one, behind `npx oathrion`, has run 9 hours on its endurance bench without an
+  error (161,336 calls, 17 November, `script/endurance-pivot.mjs`). With that many actions,
+  more than a year of use, its home page took 1 to 3 seconds to open.
 - **More than 12 hours of continuous running.** A 72-hour run is planned.
 - **Several instances sharing one database**, beyond the two-process test.
 - **Resistance to a third-party penetration test.** There has been none.

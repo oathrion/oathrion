@@ -60,15 +60,15 @@ function fakeSpawner(behaviour: (command: string, args: string[]) => { code: num
 describe("la notification qui décide (10 novembre)", () => {
   const wait = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
-  it("une approbation : « Approve » / « Reject », l'image, et le corps qui ouvre la console", async () => {
+  it("une approbation : « Yes, go ahead » / « No », l'image, et le corps qui ouvre la console", async () => {
     const chosen: string[] = [];
     const opened: (string | null)[] = [];
     for (const answer of ["approve", "default"]) {
       const { calls, spawnImpl } = fakeSpawner(() => ({ code: 0, stdout: `${answer}\n` }));
       const channel = new DesktopChannel({ platform: "linux", spawnImpl, onAction: (_e, id) => chosen.push(id), onDecide: (id) => opened.push(id) });
       const result = await channel.deliver(event({ data: { image: "/opt/oathrion/public/favicon.png" } }));
-      expect(result).toMatchObject({ ok: true, detail: 'notify-send, buttons "Approve" "Reject"' });
-      expect(calls[0]!.args).toEqual(expect.arrayContaining(["--icon=/opt/oathrion/public/favicon.png", "--action=default=Open the console", "--action=approve=Approve", "--action=reject=Reject"]));
+      expect(result).toMatchObject({ ok: true, detail: 'notify-send, buttons "Yes, go ahead" "No"' });
+      expect(calls[0]!.args).toEqual(expect.arrayContaining(["--icon=/opt/oathrion/public/favicon.png", "--action=default=Open the console", "--action=approve=Yes, go ahead", "--action=reject=No"]));
       await wait(20);
     }
     expect(chosen).toEqual(["approve"]);
@@ -78,8 +78,9 @@ describe("la notification qui décide (10 novembre)", () => {
   it("une alerte à elle garde son titre ; un programme jamais vu dit où décider, ici ou dans la console", () => {
     expect(desktopText(event({ approvalId: null, title: "agy was paused", summary: "Nothing it was doing is lost.", data: { custom: true } }))).toEqual({ title: "agy was paused", body: "Nothing it was doing is lost." });
     const unknown = (data: Record<string, unknown>) => desktopText(event({ approvalId: null, agentName: "agy", data: { unknownProgram: true, description: "/x/agy", ...data } })).body;
-    expect(unknown({ actions: [{ id: "trust", label: "It's mine" }] })).toMatch(/Confirm it or block it here\.$/);
-    expect(unknown({})).toMatch(/in Oathrion's console\.$/);
+    /* Warden parle : Oathrion a retenu ce programme (`shared/friendly-words.ts`). */
+    expect(unknown({ actions: [{ id: "trust", label: "It's mine" }] })).toBe("Did you just start agy? I've never seen it. Tell me it's yours and it can work.");
+    expect(unknown({})).toMatch(/\(in Oathrion's console\)\.$/);
   });
 
   it("les boutons d'un événement : trois au plus, des noms sûrs ; une notification groupée n'en a pas", () => {

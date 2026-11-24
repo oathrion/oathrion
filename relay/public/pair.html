@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#06071c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Oathrion · Pair this phone</title>
+<link rel="icon" href="/icon.png">
+<link rel="apple-touch-icon" href="/icon.png">
+<link rel="manifest" id="manifest" href="/manifest.webmanifest">
+<link rel="stylesheet" href="/style.css">
+<script src="/common.js" defer></script>
+<script src="/pair.js" defer></script>
+</head>
+<body>
+<main>
+  <div class="brand"><img src="/icon.png" alt=""> Oathrion</div>
+
+  <div class="ring glow" id="ring"><div class="inner"><img src="/mascots/warden.png" alt="Warden, Oathrion's guardian"></div></div>
+  <h1 class="center" id="heading">Approve from <span class="grad">this phone</span></h1>
+  <p class="muted center" id="what">Your AI agents ask before they act. Their requests will reach this phone, and you answer yes or no, wherever you are.</p>
+  <div class="steps" id="steps" hidden><span class="on" id="step1">1 · Allow</span><span id="step2">2 · Paired</span></div>
+
+  <section class="card wait" id="step-allow" hidden>
+    <p style="margin-top:0">One tap: allow Oathrion's notifications on this phone.</p>
+    <label for="label">This phone's name, as your computer will show it
+      <input id="label" maxlength="40" autocomplete="off">
+    </label>
+    <button id="allow">Allow notifications</button>
+  </section>
+
+  <section class="card" id="step-ios" hidden>
+    <p style="margin-top:0">On iPhone, Oathrion first goes on your home screen:</p>
+    <ol class="how">
+      <li><span>Tap <b>Share</b> <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8"/></svg> at the bottom of Safari.</span></li>
+      <li><span>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</span></li>
+      <li><span>Open <b>Oathrion</b> from your home screen, and tap Allow notifications.</span></li>
+    </ol>
+    <p class="muted small">Within ten minutes; after that, show a new code in the console.</p>
+  </section>
+
+  <section class="card" id="step-scan" hidden>
+    <p style="margin-top:0">Open this page from your computer:</p>
+    <ol class="how">
+      <li><span>In Oathrion's console, choose <b>Pair my phone</b>.</span></li>
+      <li><span>Scan the code it shows with this phone's camera.</span></li>
+    </ol>
+  </section>
+
+  <section class="card" id="step-paired" hidden>
+    <p class="ok center" id="paired-text" style="margin-top:0">Paired.</p>
+    <p class="muted center">Requests from your agents will reach this phone. Touch Approve or Reject; your computer gets your answer.</p>
+    <button id="install" hidden>Install Oathrion on this phone</button>
+    <button class="link" id="unpair">Unpair this phone</button>
+  </section>
+
+  <p id="status" class="muted center" aria-live="polite"></p>
+  <p class="muted small center" style="margin-top:28px">Your phone receives the title and the reason of each request, never its content. They are encrypted on your computer: Oathrion's relay cannot read them.</p>
+</main>
+</body>
+</html>

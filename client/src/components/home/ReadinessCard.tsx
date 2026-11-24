@@ -92,7 +92,7 @@ export function ReadinessCard() {
     },
     phone: {
       title: "Decide from your phone, anywhere",
-      done: (s) => `Paired (Telegram${s.bot ? `, @${s.bot}` : ""})`,
+      done: (s) => (s.device ? `Paired (${s.device})` : `Paired (Telegram${s.bot ? `, @${s.bot}` : ""})`),
       /* 16 novembre : plus de terminal ni de jeton recopié du téléphone, l'assistant de la console (`PhonePairDialog`). */
       action: () => (
         <Button size="sm" variant="outline" className="rounded-full" onClick={() => setPairing(true)} data-testid="readiness-phone">

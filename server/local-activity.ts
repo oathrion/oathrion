@@ -14,6 +14,7 @@
  * Fonctions pures : la route (`/api/local/activity`) leur passe les exécutions et les lignes.
  */
 
+import type { PhoneApproval } from "@shared/phone-approval";
 import type { Execution } from "@shared/types";
 
 import type { JournalEntry } from "../cli/wrap/claude-journal";
@@ -48,6 +49,10 @@ export interface ActivityEntry {
   ref: string;
   /** Une suppression refusée : ce qu'elle aurait effacé (« 48,312 files (3.2 GB) »). */
   impact?: string;
+  /** Où vit la réponse d'une personne : l'exécution et l'approbation (la sienne, ou le passage de relais du hook). */
+  decidedIn?: string[];
+  /** Cette réponse, signée par le téléphone de la personne (`shared/phone-approval.ts`). */
+  phone?: PhoneApproval;
 }
 
 const HANDOFF_PREFIX = "mcp.claude-code.";
@@ -80,6 +85,7 @@ export function fromExecution(execution: Execution): ActivityEntry | null {
     outcome,
     detail: outcome === "done" ? null : execution.decisionReason || null,
     ref: execution.id,
+    ...(held ? { decidedIn: [execution.id, ...(execution.approvalId ? [execution.approvalId] : [])] } : {}),
   };
 }
 
@@ -98,8 +104,21 @@ export function handoffAnswers(executions: readonly Execution[]): HandoffAnswer 
   return (target, command) => answers.get(`${target}\n${command ?? ""}`) ?? null;
 }
 
+/** Les demandes `mcp.claude-code.*` : où vit la dernière réponse de la personne (exécution, approbation), par cible et commande. */
+export type HandoffDecision = (target: string, command: string | undefined) => string[] | null;
+
+export function handoffDecisions(executions: readonly Execution[]): HandoffDecision {
+  const found = new Map<string, string[]>();
+  const sorted = [...executions].filter((e) => e.action.startsWith(HANDOFF_PREFIX)).sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  for (const execution of sorted) {
+    const command = typeof execution.input?.command === "string" ? execution.input.command : "";
+    found.set(`${execution.target}\n${command}`, [execution.id, ...(execution.approvalId ? [execution.approvalId] : [])]);
+  }
+  return (target, command) => found.get(`${target}\n${command ?? ""}`) ?? null;
+}
+
 /** Réunit les lignes « avant » et « après » d'un même appel d'outil. */
-export function fromJournal(lines: readonly JournalEntry[], answer: HandoffAnswer = () => null): ActivityEntry[] {
+export function fromJournal(lines: readonly JournalEntry[], answer: HandoffAnswer = () => null, decision: HandoffDecision = () => null): ActivityEntry[] {
   const calls = new Map<string, { pre?: JournalEntry; post?: JournalEntry }>();
   lines.forEach((line, index) => {
     const key = line.toolUseId ?? `ligne-${String(index)}`;
@@ -131,6 +150,7 @@ export function fromJournal(lines: readonly JournalEntry[], answer: HandoffAnswe
       first.command ??
       (first.untrusted ? `read untrusted content: ${first.untrusted}` : `${kind === "created" ? "create" : kind === "replaced" ? "replace" : "write"} ${first.target.replace(/^file:\/\//, "")}`);
     const exitCode = typeof post?.outcome?.exitCode === "number" ? `exit code ${String(post.outcome.exitCode)}` : null;
+    const decidedIn = pre?.person ? decision(first.target, first.command) : null;
     entries.push({
       at: first.at,
       source: "claude-code",
@@ -143,14 +163,28 @@ export function fromJournal(lines: readonly JournalEntry[], answer: HandoffAnswe
         (first.untrusted ? "the session is now marked: what it sends out next asks a person" : null),
       ref,
       ...(pre?.impact ? { impact: describeImpact(pre.impact) } : {}),
+      ...(decidedIn ? { decidedIn } : {}),
     });
   }
   return entries;
 }
 
 /** Le fil complet, du plus récent au plus ancien. */
-export function timeline(executions: readonly Execution[], journal: readonly JournalEntry[], options: { agent?: string; limit?: number } = {}): ActivityEntry[] {
-  const all = [...executions.map(fromExecution).filter((e): e is ActivityEntry => e !== null), ...fromJournal(journal, handoffAnswers(executions))];
+export function timeline(
+  executions: readonly Execution[],
+  journal: readonly JournalEntry[],
+  options: { agent?: string; limit?: number; approvals?: ReadonlyMap<string, PhoneApproval> } = {},
+): ActivityEntry[] {
+  const all = withPhoneApprovals([...executions.map(fromExecution).filter((e): e is ActivityEntry => e !== null), ...fromJournal(journal, handoffAnswers(executions), handoffDecisions(executions))], options.approvals);
   const filtered = options.agent ? all.filter((entry) => entry.agent === options.agent) : all;
   return filtered.sort((a, b) => b.at.localeCompare(a.at)).slice(0, options.limit ?? 300);
+}
+
+/** Chaque réponse d'une personne donnée sur son téléphone, avec l'accord qu'il a signé (`server/local-phone-approvals.ts`). */
+export function withPhoneApprovals(entries: ActivityEntry[], approvals: ReadonlyMap<string, PhoneApproval> | undefined): ActivityEntry[] {
+  if (!approvals || approvals.size === 0) return entries;
+  return entries.map((entry) => {
+    const phone = entry.decidedIn?.map((id) => approvals.get(id)).find((found) => found !== undefined);
+    return phone ? { ...entry, phone } : entry;
+  });
 }

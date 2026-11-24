@@ -100,10 +100,21 @@ export default function LocalSettingsPage() {
           </Row>
           <Row icon={Smartphone} title="Your phone" state={data.phone?.paired ? "Paired" : "Not paired"} on={data.phone?.paired === true}>
             {data.phone?.paired ? (
-              <>Requests reach you on Telegram (@{data.phone.bot}), with Approve and Reject, anywhere. <InTerminal label="Unpair" command="oathrion phone off" /></>
+              data.phone.via === "relay" ? (
+                <>
+                  {data.phone.kind === "web"
+                    ? `Requests reach ${data.phone.account ?? "your phone"} as notifications: answer yes or no, anywhere.`
+                    : `Requests reach you on Telegram (@${String(data.phone.bot)}${data.phone.account ? `, ${data.phone.account}` : ""}): answer yes or no, anywhere.`}{" "}
+                  <Button size="sm" variant="outline" onClick={() => setPairing(true)} data-testid="button-manage-phone">
+                    Manage
+                  </Button>
+                </>
+              ) : (
+                <>Requests reach you on Telegram (@{data.phone.bot}): answer yes or no, anywhere. <InTerminal label="Unpair" command="oathrion phone off" /></>
+              )
             ) : (
               <span className="flex flex-wrap items-center justify-between gap-3">
-                <span>Away from your computer, your agents' requests reach your phone on Telegram, with Approve and Reject.</span>
+                <span>Away from your computer, your agents' requests reach your phone: you answer yes or no. One scan, no app.</span>
                 <Button size="sm" onClick={() => setPairing(true)} data-testid="button-pair-phone">
                   Pair my phone
                 </Button>

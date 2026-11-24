@@ -52,9 +52,11 @@ servers, shows you the list, and after one Enter:
   moment anything reads one;
 - **you recognise each agent at once**: it has its own mascot, and you can choose it and give
   the agent a name, in the console.
-- **you decide from your phone, anywhere**, even with your computer left at home: requests
-  arrive on Telegram with **Approve** and **Reject** (`oathrion phone telegram`: scan a QR code,
-  tap Start). The phone only rings when nobody decided on the computer.
+- **you decide from your phone, anywhere**, even with your computer left at home: pair it in
+  one scan, with no app (console → « Pair my phone »), or use your own Telegram bot
+  (`oathrion phone telegram`). Paired in one scan, your phone signs each answer with a key
+  that never leaves it, so an agent on your computer cannot fake it. The phone only rings when nobody decided on
+  the computer.
 
 Then it shows you the demo and pairs your phone, one Enter each: nothing else to type.
 

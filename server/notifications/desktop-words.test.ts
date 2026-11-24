@@ -23,6 +23,8 @@ describe("les mots de la notification", () => {
       headline: "claude-code wants to create note on the carnet server",
       content: "Invoice F-2026-114 paid",
       why: "your rule “carnet: every write waits for approval”",
+      /* La même demande, dite par l'agent comme un ami (`shared/friendly-words.ts`) : jamais le nom de la règle. */
+      friendly: { ask: "Can I create a note?", why: null, code: "Invoice F-2026-114 paid", where: "carnet" },
     });
   });
 
@@ -41,21 +43,31 @@ describe("les mots de la notification", () => {
     expect(notificationWords(long, null).content).toHaveLength(158);
   });
 
-  it("la notification les dit ; le téléphone, sans le contenu", () => {
+  it("l'agent écrit, comme un ami : son nom en titre, sa question ; le téléphone, sans le contenu", () => {
     const words = notificationWords(note, "carnet: every write waits for approval");
-    expect(desktopText(event(words))).toEqual({
-      title: "claude-code wants to create note on the carnet server",
-      body: "“Invoice F-2026-114 paid”\nWhy: your rule “carnet: every write waits for approval”.",
-    });
-    expect(desktopText(event(words), { content: false }).body).toBe("Why: your rule “carnet: every write waits for approval”.");
+    expect(desktopText(event(words))).toEqual({ title: "claude-code", body: "Can I create a note?\non carnet: Invoice F-2026-114 paid" });
+    expect(desktopText(event(words), { content: false })).toEqual({ title: "claude-code", body: "Can I create a note?\non carnet" });
+    /* Le nom que la personne a donné à l'agent (sa mascotte) est l'expéditeur. */
+    expect(desktopText(event(words, { data: { action: "mcp.carnet.create_note", words, mascot: { name: "Pixel" } } })).title).toBe("Pixel");
+  });
+
+  it("une commande de Claude Code : la question, ce que ça change, la commande ; le téléphone la garde", () => {
+    const push = { agentName: "Claude Code", requestedValue: "", title: "", context: [{ label: "Action", value: "mcp.claude-code.shell" }, { label: "Target", value: "shell:///home/awa/app" }, { label: "command", value: "git push origin main" }, { label: "reason", value: "Oathrion: a push publishes your commits. Allow it?" }] };
+    const words = notificationWords(push, null);
+    const asked = event(words, { agentName: "Claude Code", data: { action: "mcp.claude-code.shell", command: "git push origin main", words, mascot: { name: "elias" } } });
+    expect(desktopText(asked)).toEqual({ title: "elias", body: "Can I publish your code to the shared repository?\nYour team will see it.\ngit push origin main" });
+    expect(desktopText(asked, { content: false }).body).toContain("git push origin main");
+    expect(desktopText(asked).body).not.toMatch(/rule|Oathrion|Why:/);
   });
 
   it("plusieurs demandes rapprochées : la liste, pas un renvoi à la console", () => {
     const words = notificationWords(note, null);
     const grouped = groupedEvent([event(words), event({ ...words, headline: "claude-code wants to update issue on the github server" }, { id: "e2" }), event(words, { id: "e3" }), event(words, { id: "e4" })]);
     expect(desktopText(grouped)).toEqual({
-      title: "4 requests are waiting for your decision",
-      body: "· claude-code wants to create note on the carnet server\n· claude-code wants to update issue on the github server\n· claude-code wants to create note on the carnet server\n· and 1 more\nDecide each one in Oathrion's console.",
+      title: "claude-code",
+      body: "I have 4 questions for you.\n· Can I create a note?\n· Can I create a note?\n· Can I create a note?\n· and 1 more\nAnswer each one in Oathrion's console.",
     });
+    /* Des agents différents : « Your agents ». */
+    expect(desktopText(groupedEvent([event(words), event(words, { id: "e2", agentName: "Cursor" })])).title).toBe("Your agents");
   });
 });

@@ -203,6 +203,9 @@ if (keptGit) {
 /* ------------------------------------------------------------------ 7. --verify */
 if (flag("verify")) {
   symlinkSync(join(ROOT, "node_modules"), join(OUT, "node_modules"), "dir");
+  /* Le relais du téléphone a ses propres dépendances (`ws`), que le typage et ses tests lisent (24 novembre). */
+  if (!existsSync(join(ROOT, "relay", "node_modules"))) fail("relay/node_modules manque : lancez `npm ci --prefix relay` d'abord.");
+  symlinkSync(join(ROOT, "relay", "node_modules"), join(OUT, "relay", "node_modules"), "dir");
   for (const [label, command, commandArgs] of [
     ["typage", "npx", ["tsc", "--noEmit"]],
     ["lint", "npx", ["eslint", "."]],
@@ -215,6 +218,7 @@ if (flag("verify")) {
     say(`${label} : ✓ ${tail}`);
   }
   rmSync(join(OUT, "node_modules"));
+  rmSync(join(OUT, "relay", "node_modules"));
 }
 
 if (stillPlaceholders.length > 0) {

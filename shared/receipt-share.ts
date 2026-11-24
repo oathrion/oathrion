@@ -21,6 +21,8 @@ import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sig
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import type { PhoneApproval } from "./phone-approval";
+
 export const RECEIPT_TYPE = "oathrion.receipt/v0";
 /** Un PAQUET de reçus : tout ce qu'un agent a fait sur une branche (`server/local-bundle.ts`). */
 export const BUNDLE_TYPE = "oathrion.bundle/v0";
@@ -54,6 +56,8 @@ export interface ReceiptStatement {
     detail: string | null;
     impact: string | null;
     ref: string;
+    /** L'action en mots simples (« publish the code to the shared repository ») ; la commande reste dans `what`. */
+    todo?: string;
   };
   evidence: {
     chain: string;
@@ -63,6 +67,8 @@ export interface ReceiptStatement {
     chainEntries: number;
     chainHead: string | null;
   };
+  /** La réponse de la personne, signée par son téléphone : une seconde signature, que la machine ne peut pas fabriquer. */
+  approval?: PhoneApproval;
 }
 
 export interface Signed<T extends SignedDocument> {
@@ -145,6 +151,6 @@ export function extractShared(text: string): unknown {
 }
 
 /** Le reçu, à placer dans `<script type="application/json">` sans pouvoir le refermer. */
-export function embedShared(shared: SharedReceipt): string {
+export function embedShared(shared: Signed<SignedDocument>): string {
   return `${OPEN}${JSON.stringify(shared).replace(/</g, "\\u003c")}</script>`;
 }

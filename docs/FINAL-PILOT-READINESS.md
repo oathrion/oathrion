@@ -81,7 +81,7 @@ hébergée ni par un utilisateur.
 | `verify:compose` | **1** puis **0** | premier passage : `registry-1.docker.io` non résolu (« server misbehaving », DNS du Wi-Fi), 0/1 — conservé ; relancé seul une fois le DNS revenu : **35/35** |
 
 Contre le **vrai GitHub** (jeton à portée fine limité au dépôt de test
-`<compte-de-test>/<dépôt-de-test>`), `STRESS-TEST-LOG` § 5.10 :
+`<identifiant retiré>/placet-essai`), `STRESS-TEST-LOG` § 5.10 :
 
 | Commande | Code | Résultat |
 |---|---|---|
