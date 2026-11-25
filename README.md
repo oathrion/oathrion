@@ -12,7 +12,7 @@ Oathrion sits between your agents (Claude Code, Cursor, Antigravity…) and what
 your files, your secrets, your MCP servers (GitHub, Slack, Linear, Stripe…). It refuses what
 your rules refuse, holds what needs you, and writes a receipt for everything it lets through.
 
-> **Status: public preview — `0.1.0-preview.1`** ([changelog](CHANGELOG.md)). Use it to try, to pilot, and to tell us what
+> **Status: public preview** (each version and what it changed: the [changelog](CHANGELOG.md)). Use it to try, to pilot, and to tell us what
 > breaks. Do not run it unattended in production yet. What is proven and what is not is
 > listed [below](#what-is-proven-and-what-is-not), plainly.
 >

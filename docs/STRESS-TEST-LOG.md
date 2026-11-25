@@ -4150,3 +4150,30 @@ vérifie ; dans Chrome : « Verified », « Your agents did 11 things in this pr
 stopped 1 action. », « 23 Nov · ran the tests 3 times, built the project 3 times… », « Oathrion
 stopped: delete files · it would have deleted 812 files ». **Publié par le fondateur** le 23 novembre
 au soir : `latest` = `0.1.0-preview.6`, shasum `1bccad73`, le même que le paquet vérifié.
+
+### 5.99 Le Code Mode de Claude Code : le hook voit chaque action du programme
+
+Le 24 novembre 2026, au soir. Claude Code a un Code Mode expérimental, désactivé par défaut,
+depuis la version 2.1.323 (`CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1`) : Claude écrit un programme
+JavaScript (l'outil `REPL`) qui fait plusieurs actions d'un coup. La question : le hook
+d'Oathrion, qui n'écoute pas `REPL`, voit-il encore chaque action ?
+
+**Hors ligne**, les vraies règles (`judge`, `cli/wrap/claude-hook-rules.ts`) sur les commandes
+sous la forme que le Code Mode leur donne (`cd 'app' && …`) : push forcé, `rm -rf` hors du projet,
+`curl … | sh` et écriture hors du projet refusés ; `DROP TABLE` et `git reset --hard` demandent
+une personne. `vercel deploy --prod` n'est jugé par aucune règle, avec ou sans Code Mode.
+
+**Pour de vrai**, Claude Code 2.1.331 installé dans un dossier jetable, une session interactive
+pilotée par un pseudo-terminal, dans un dépôt factice avec un dépôt distant local, le hook réel de
+la machine : « en une fois, `git status` puis `git push --force origin main` ».
+- Claude a écrit un programme (`REPL`) avec les deux commandes.
+- Claude Code a envoyé **chaque** commande au hook, sous le nom `Bash` : `git status` est passé ;
+  le push forcé a été refusé (« Oathrion refuses a forced push »), avant de partir. Le dépôt
+  distant n'a pas bougé.
+- En `-p`, le Code Mode ne s'active pas (la documentation le dit) : Claude a appelé `Bash`
+  directement, refusé de même.
+
+**À retenir :** le Code Mode ne contourne pas Oathrion. Et l'écran d'activation de Claude Code le
+dit lui-même : en mode automatique, la vérification d'Anthropic lit le programme une fois, pas
+chaque action qu'il lance ; le hook, lui, les voit toutes. Pas vérifié : les outils MCP appelés
+depuis un programme (même règle d'après la documentation), et les éditions de fichiers.
