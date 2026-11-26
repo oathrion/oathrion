@@ -4229,3 +4229,30 @@ refusé avant de partir, le dépôt distant inchangé.
 
 **Ordre de mise en ligne** : d'abord `npm publish` (le catalogue pointe vers le paquet npm : poussé
 avant, il installerait la preview.6, sans plugin), ensuite l'arbre public.
+
+### 5.102 Le plugin en ligne : installé comme un utilisateur
+
+Le 26 novembre 2026. `oathrion@0.1.0-preview.7` publié sur npm par Abdoulaye (`latest`), puis
+l'arbre public poussé (`b941623`), avec le catalogue `.claude-plugin/marketplace.json`.
+
+Dans un dépôt factice, avec Claude Code 2.1.309, exactement ce que ferait un utilisateur (portée
+locale, pour ne rien toucher ailleurs) :
+- `claude plugin marketplace add oathrion/oathrion` : le dépôt cloné depuis GitHub, le catalogue
+  validé ;
+- `claude plugin install oathrion@oathrion` : la version 0.1.0-preview.7, prise sur npm, installée
+  et activée ;
+- une vraie session : « git push --force origin main » refusé avant de partir (« Oathrion refuses a
+  forced push »), le dépôt distant inchangé.
+
+Puis tout retiré (`plugin uninstall`, `plugin marketplace remove`) ; le cache de Claude Code garde
+une copie du paquet (`~/.claude/plugins/cache/oathrion`), sans effet.
+
+### 5.103 Un test instable sous Node 24 : deux clés avec le même identifiant
+
+Le 26 novembre 2026, la CI publique du commit `b941623` : tout vert sauf « Typecheck, lint,
+tests, build (Node 24) », un seul test en échec, sans lien avec le plugin :
+`local-bootstrap.test.ts` (« la clé d'approbation du relais … ») : `UNIQUE constraint failed:
+api_keys.id`. Les identifiants des clés de `oathrion wrap` étaient faits de l'heure en
+millisecondes seule ; deux lancements dans la même milliseconde (Node 24, plus rapide) donnaient
+le même. Corrigé dans `server/local-bootstrap.ts` : l'heure, plus 3 octets au hasard, pour la clé
+de l'agent comme pour celle d'approbation. Le test : 13 sur 13, trois fois de suite.

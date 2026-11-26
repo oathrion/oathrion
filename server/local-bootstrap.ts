@@ -376,7 +376,8 @@ export async function bootstrapLocalWorkspace(input: {
     if (key.agentId === agentId && key.revokedAt === null) apiKeyStore.revoke(organizationId, key.id, "oathrion wrap", "relance");
   }
   apiKeyStore.create({
-    id: `key_wrap_${input.server}_${Date.now().toString(36)}`,
+    /* L'heure seule ne suffit pas : deux lancements dans la même milliseconde (Node 24, en CI) donnaient le même identifiant. */
+    id: `key_wrap_${input.server}_${Date.now().toString(36)}${randomBytes(3).toString("hex")}`,
     organizationId,
     name: `oathrion wrap · ${input.server}`,
     role: "operator",
@@ -394,7 +395,7 @@ export async function bootstrapLocalWorkspace(input: {
   }
   if (input.approverKey) {
     apiKeyStore.create({
-      id: `${approverPrefix}${Date.now().toString(36)}`,
+      id: `${approverPrefix}${Date.now().toString(36)}${randomBytes(3).toString("hex")}`,
       organizationId,
       name: APPROVER_NAME,
       role: "approver",
