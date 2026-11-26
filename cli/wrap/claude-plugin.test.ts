@@ -2,7 +2,8 @@
  * Le plugin Claude Code (`plugin/`, copié à la racine du paquet npm) : ses hooks appellent le même
  * hook que `npx oathrion`, avec `--plugin`, et se taisent quand `npx oathrion` a déjà posé les siens.
  */
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -63,7 +64,7 @@ describe("le plugin Claude Code", () => {
       expect(entries).toHaveLength(1);
       expect(entries[0]!.matcher).toBe(`${HOOK_MATCHER}|${TAINT_MATCHER}`);
       const phase = event === "PreToolUse" ? "pre" : "post";
-      expect(entries[0]!.hooks).toEqual([{ type: "command", command: `node "\${CLAUDE_PLUGIN_ROOT}/oathrion-hook.mjs" claude-code ${phase} ${PLUGIN_FLAG}`, ...(phase === "pre" ? { timeout: 120 } : {}) }]);
+      expect(entries[0]!.hooks).toEqual([{ type: "command", command: `node "\${CLAUDE_PLUGIN_ROOT}/scripts/oathrion-hook-launcher.mjs" claude-code ${phase} ${PLUGIN_FLAG}`, ...(phase === "pre" ? { timeout: 120 } : {}) }]);
     }
   });
 
@@ -71,7 +72,61 @@ describe("le plugin Claude Code", () => {
     const plugin = read("plugin/.claude-plugin/plugin.json");
     const market = read(".claude-plugin/marketplace.json") as { name: string; plugins: { name: string; source: unknown }[] };
     expect(plugin.name).toBe("oathrion");
-    expect(plugin.version).toBeUndefined();
+    expect(plugin.version).toBe((JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { version: string }).version);
     expect(market.plugins).toEqual([expect.objectContaining({ name: plugin.name, source: { source: "npm", package: "oathrion" } })]);
+  });
+});
+
+/*
+ * LE LANCEUR (`plugin/scripts/oathrion-hook-launcher.mjs`) : le répertoire d'Anthropic lit le
+ * plugin dans un dossier de GitHub, sans le programme du hook. Le lanceur le prend à côté (paquet
+ * npm), sinon dans le dossier de données du plugin, où il l'installe une fois.
+ */
+describe("le lanceur du hook", () => {
+  const LAUNCHER = join(ROOT, "plugin", "scripts", "oathrion-hook-launcher.mjs");
+  /* Un faux programme du hook : il rend ses arguments et ce qu'il a lu. */
+  const FAKE_HOOK = `let d="";process.stdin.on("data",(c)=>d+=c);process.stdin.on("end",()=>{process.stdout.write(JSON.stringify({args:process.argv.slice(2),stdin:d})+"\\n");process.exit(7);});`;
+  const run = (env: NodeJS.ProcessEnv, phase = "pre") =>
+    spawnSync(process.execPath, [LAUNCHER, "claude-code", phase, PLUGIN_FLAG], { input: '{"tool_name":"Bash"}', encoding: "utf8", env: { PATH: process.env.PATH, ...env } });
+
+  it("dans le paquet npm : le programme d'à côté, les arguments et l'entrée transmis tels quels, son code de sortie aussi", () => {
+    const root = mkdtempSync(join(tmpdir(), "oathrion-launch-"));
+    writeFileSync(join(root, "oathrion-hook.mjs"), FAKE_HOOK);
+    const out = run({ CLAUDE_PLUGIN_ROOT: root });
+    expect(out.status).toBe(7);
+    expect(JSON.parse(out.stdout)).toEqual({ args: ["claude-code", "pre", PLUGIN_FLAG], stdin: '{"tool_name":"Bash"}' });
+  });
+
+  it("depuis GitHub : installe une fois la version épinglée dans le dossier de données, puis la réutilise", () => {
+    const base = mkdtempSync(join(tmpdir(), "oathrion-launch-"));
+    const data = join(base, "data");
+    const npm = join(base, "fake-npm");
+    const calls = join(base, "calls");
+    /* Un faux npm : il note l'appel et pose dans la destination une archive comme celle de `npm pack`. */
+    writeFileSync(npm, `#!/bin/sh\necho "$@" >> "${calls}"\nwhile [ "$1" != "--pack-destination" ]; do shift; done\nT=$(mktemp -d)\nmkdir -p "$T/package"\ncat > "$T/package/oathrion-hook.mjs" <<'JS'\n${FAKE_HOOK}\nJS\ntar -czf "$2/oathrion-x.tgz" -C "$T" package\necho oathrion-x.tgz\n`);
+    chmodSync(npm, 0o755);
+    const env = { CLAUDE_PLUGIN_ROOT: join(base, "plugin"), CLAUDE_PLUGIN_DATA: data, OATHRION_PLUGIN_NPM: npm };
+    expect(run(env).status).toBe(7);
+    expect(run(env).status).toBe(7);
+    const version = (JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { version: string }).version;
+    const lines = readFileSync(calls, "utf8").trim().split("\n");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain(`oathrion@${version}`);
+    expect(lines[0]).toMatch(/^pack /);
+    expect(existsSync(join(data, "oathrion", version, "package", "oathrion-hook.mjs"))).toBe(true);
+    expect(existsSync(join(data, "oathrion", version, "oathrion-x.tgz"))).toBe(false);
+  });
+
+  it("si l'installation échoue : avant l'action, demander à la personne en disant pourquoi ; après, rien", () => {
+    const base = mkdtempSync(join(tmpdir(), "oathrion-launch-"));
+    const npm = join(base, "fake-npm");
+    writeFileSync(npm, "#!/bin/sh\necho 'npm ERR! network unreachable' >&2\nexit 1\n");
+    chmodSync(npm, 0o755);
+    const env = { CLAUDE_PLUGIN_ROOT: join(base, "plugin"), CLAUDE_PLUGIN_DATA: join(base, "data"), OATHRION_PLUGIN_NPM: npm };
+    const pre = run(env, "pre");
+    expect(pre.status).toBe(0);
+    expect(JSON.parse(pre.stdout).hookSpecificOutput).toEqual({ hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: expect.stringMatching(/^Oathrion could not check this action \(npm pack oathrion@.+ failed: npm ERR! network unreachable\)/) });
+    const post = run(env, "post");
+    expect(post).toMatchObject({ status: 0, stdout: "" });
   });
 });

@@ -1,5 +1,6 @@
 {
   "name": "oathrion",
+  "version": "0.1.0-preview.7",
   "displayName": "Oathrion",
   "description": "Checks Claude Code's shell commands and file edits before they run: the most dangerous are refused (a recursive delete outside the project, a forced push, a script piped from the internet), risky ones ask a person, and every action goes to a tamper-evident journal. Run npx oathrion to approve from your phone and get signed receipts.",
   "author": {

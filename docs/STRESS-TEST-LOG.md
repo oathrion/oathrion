@@ -4256,3 +4256,35 @@ api_keys.id`. Les identifiants des clés de `oathrion wrap` étaient faits de l'
 millisecondes seule ; deux lancements dans la même milliseconde (Node 24, plus rapide) donnaient
 le même. Corrigé dans `server/local-bootstrap.ts` : l'heure, plus 3 octets au hasard, pour la clé
 de l'agent comme pour celle d'approbation. Le test : 13 sur 13, trois fois de suite.
+
+### 5.104 Le plugin prêt pour le répertoire d'Anthropic : un lanceur, et un README
+
+Le 26 novembre 2026. Le répertoire d'Anthropic (claude.ai/directory/manage) lit un plugin dans un
+**dossier de GitHub** : le dossier `plugin/` n'avait que le manifeste, l'icône et les hooks, et
+ses hooks appelaient `oathrion-hook.mjs`, qui n'existe que dans le paquet npm. Lu depuis GitHub,
+le plugin n'aurait pas trouvé son programme ; et un README d'au moins 40 mots y manquait (motif de
+refus du répertoire).
+
+**Fait.**
+- `plugin/scripts/oathrion-hook-launcher.mjs`, du JavaScript lisible, sans dépendance : les hooks
+  l'appellent ; il prend `oathrion-hook.mjs` à côté (plugin installé depuis le paquet npm), sinon
+  dans le dossier de données du plugin (`${CLAUDE_PLUGIN_DATA}`), où il le pose **une fois** :
+  `npm pack oathrion@<version épinglée>` puis `tar`. Le programme du hook n'utilise que les
+  modules de Node : ni dépendance ni script d'installation.
+- Un premier essai avec `npm install` (cache vide, comme chez un nouvel utilisateur) a dépassé
+  100 secondes, à cause des dépendances natives : le lanceur s'est replié en demandant à la
+  personne, comme prévu, mais c'était trop lent. Avec `npm pack` : **6,4 s** au premier usage
+  (téléchargement, décompression et jugement), **0,4 s** ensuite.
+- Si l'installation échoue, avant l'action le lanceur **demande** à la personne, en disant pourquoi
+  (jamais laisser passer sans regard) ; après l'action, il se tait.
+- `plugin/README.md` : ce que le plugin lance, télécharge (et quand), lit, et n'envoie pas ; ce
+  qu'il ne fait pas ; la licence et le contact.
+- La version est épinglée dans le lanceur et le manifeste : `version-coherence.test.ts` les garde
+  égales à `package.json` (sept endroits).
+
+**Vérifié.**
+- `claude plugin validate plugin --strict` : « Validation passed », rien à signaler.
+- Une vraie session de Claude Code avec le dossier `plugin/` du dépôt, tel que le répertoire le
+  lira : le lanceur a posé Oathrion dans `~/.claude/plugins/data/oathrion-inline`, et
+  « git push --force origin main » a été refusé avant de partir.
+- Tests : 534 sur 534 (`cli/wrap/`, la documentation, les versions, `local-bootstrap`).

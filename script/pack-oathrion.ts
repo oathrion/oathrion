@@ -85,7 +85,9 @@ cpSync(join(ROOT, "dist/public"), join(OUT, "public"), { recursive: true });
 /* Le paquet est aussi un plugin Claude Code (26 novembre) : son manifeste et ses hooks, à la racine. */
 cpSync(join(ROOT, "plugin/.claude-plugin"), join(OUT, ".claude-plugin"), { recursive: true });
 cpSync(join(ROOT, "plugin/hooks"), join(OUT, "hooks"), { recursive: true });
-/* La version du plugin est celle du paquet, posée ici : le dépôt n'en porte pas, pour ne pas la figer à côté. */
+/* Le lanceur des hooks : dans le paquet, il trouve `oathrion-hook.mjs` juste à côté et n'installe rien. */
+cpSync(join(ROOT, "plugin/scripts"), join(OUT, "scripts"), { recursive: true });
+/* La version du plugin est celle du paquet, reposée ici (le test de cohérence des versions garde la source à jour). */
 const pluginManifest = JSON.parse(readFileSync(join(OUT, ".claude-plugin/plugin.json"), "utf8")) as Record<string, unknown>;
 writeFileSync(join(OUT, ".claude-plugin/plugin.json"), `${JSON.stringify({ name: pluginManifest.name, version: VERSION, ...pluginManifest }, null, 2)}\n`);
 /*
@@ -139,7 +141,7 @@ writeFileSync(
       description: "Govern any MCP server with one command: reads pass, writes wait for your approval, destructive tools are blocked, every executed call leaves a receipt in a tamper-evident chain.",
       license: "Apache-2.0",
       bin: { oathrion: "oathrion.mjs" },
-      files: ["oathrion.mjs", "oathrion-hook.mjs", "oathrion-local.cjs", "public", ".claude-plugin", "hooks", "LICENSE", "NOTICE", "README.md"],
+      files: ["oathrion.mjs", "oathrion-hook.mjs", "oathrion-local.cjs", "public", ".claude-plugin", "hooks", "scripts", "LICENSE", "NOTICE", "README.md"],
       engines: { node: ">=22" },
       keywords: ["mcp", "model-context-protocol", "ai-agents", "governance", "approval", "audit"],
       /* Les liens de la page npm : sans eux, rien n'y mène au dépôt ni au site. */

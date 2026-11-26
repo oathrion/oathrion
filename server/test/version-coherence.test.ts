@@ -1,5 +1,5 @@
 /**
- * UNE SEULE VERSION, écrite à cinq endroits.
+ * UNE SEULE VERSION, écrite à sept endroits.
  *
  * Relevé en préparant la préversion (28 octobre 2026) : le produit disait 1.0.0, la commande et
  * le SDK Python 0.8.0, la passerelle MCP annonçait 1.0.0 en dur. Aucun ne mentait exprès ; ils
@@ -41,6 +41,11 @@ describe("la version du produit est la même partout", () => {
 
   it("la passerelle MCP, dans serverInfo", () => {
     expect(literal("server/mcp/router.ts", /const SERVER_INFO = \{ name: "oathrion", version: "([^"]+)" \}/)).toBe(product);
+  });
+
+  it("le plugin Claude Code : son manifeste, et le lanceur qui installe cette version-là", () => {
+    expect(literal("plugin/scripts/oathrion-hook-launcher.mjs", /export const OATHRION_VERSION = "([^"]+)";/)).toBe(product);
+    expect(literal("plugin/.claude-plugin/plugin.json", /"version": "([^"]+)"/)).toBe(product);
   });
 
   it("le SDK Python, paquet et module, dans la notation PEP 440", () => {
