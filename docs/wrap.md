@@ -25,6 +25,23 @@ npx oathrion
 It finds the MCP servers of Claude Code, Claude Desktop and Cursor on your machine, shows them, and puts
 Oathrion in front of all of them after one answer (Enter means yes). Then restart your client.
 
+### Or, from inside Claude Code: the plugin
+
+```
+/plugin install oathrion --marketplace oathrion/oathrion
+```
+
+(Claude Code 2.1.275 or later. Before that: `/plugin marketplace add oathrion/oathrion`, then
+`/plugin install oathrion@oathrion`.) Claude Code's own shell commands and file edits are then
+checked by the same rules as below, in [Claude Code's own tools](#claude-codes-own-tools): the
+most dangerous refused, risky ones asked, all of them in the journal. It needs Node 22 or later
+on your `PATH`.
+
+The plugin does less than `npx oathrion`: it does not put Oathrion in front of your MCP servers,
+it does not pair your phone, and it cannot add the rules that stop Claude Code from reading
+Oathrion's own secrets. For those, run `npx oathrion` as well: the plugin then stays quiet, so
+nothing is judged or asked twice.
+
 Where it looks:
 
 | Client | Where |

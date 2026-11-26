@@ -4177,3 +4177,55 @@ la machine : « en une fois, `git status` puis `git push --force origin main` »
 dit lui-même : en mode automatique, la vérification d'Anthropic lit le programme une fois, pas
 chaque action qu'il lance ; le hook, lui, les voit toutes. Pas vérifié : les outils MCP appelés
 depuis un programme (même règle d'après la documentation), et les éditions de fichiers.
+
+### 5.100 Oathrion devient un plugin Claude Code
+
+Le 26 novembre 2026. Les téléchargements npm de novembre se font presque tous les jours de
+publication (1 112 du 1er au 25 novembre, dont 938 les 17 et 23) : pour être trouvé sans nous,
+Oathrion s'installe désormais de l'intérieur de Claude Code.
+
+**Ce qui a été fait.**
+- Le paquet npm est aussi un plugin : `plugin/.claude-plugin/plugin.json` (avec une icône carrée)
+  et `plugin/hooks/hooks.json`, copiés à la racine du paquet par `npm run pack:oathrion`, qui y
+  pose la version du paquet. Les hooks appellent `oathrion-hook.mjs`, le même que `npx oathrion`,
+  avec `--plugin` ; le filtre des outils est le même (vérifié par un test).
+- Le catalogue : `.claude-plugin/marketplace.json` à la racine du dépôt, source npm `oathrion`.
+  Installation : `/plugin install oathrion --marketplace oathrion/oathrion`.
+- **Rien n'est jugé deux fois** : avec `--plugin`, le hook se tait si les réglages de Claude Code
+  (personne, projet ou local) portent déjà les hooks de `npx oathrion`
+  (`OATHRION_PLUGIN_FORCE=1` le fait juger quand même, pour l'essayer).
+
+**Vérifié.**
+- `claude plugin validate --strict` sur le paquet assemblé : « Validation passed », rien à
+  signaler (version, icône, ligne d'installation du README) ; le catalogue passe aussi.
+- `claude --plugin-dir … plugin details oathrion` : 3 hooks, aucun coût en jetons.
+- Une vraie session (Claude Code 2.1.309, dépôt factice, dépôt distant local), le plugin **seul**
+  (`--setting-sources project,local`) : « git push --force origin main » refusé avant de partir,
+  le dépôt distant inchangé.
+- La même avec les réglages réels de la machine (hooks de `npx oathrion`) **et** le plugin : un
+  seul refus, **une seule** ligne au journal pour l'appel : le plugin s'est tu.
+- Tests : `cli/wrap/` et les tests de documentation, 513 sur 513.
+
+**Ce que le plugin ne fait pas** (dit dans `docs/wrap.md`) : il ne met pas les serveurs MCP derrière
+Oathrion, n'appaire pas le téléphone, et ne peut pas poser les règles qui empêchent Claude Code de
+lire les secrets d'Oathrion ; pour cela, `npx oathrion`. Il demande Node 22 dans le `PATH`.
+
+**Pas encore fait** : publier une version npm qui contient le plugin, pousser le catalogue dans
+le dépôt public, puis proposer le plugin au répertoire d'Anthropic (claude.ai/directory/manage,
+un compte payant claude.ai).
+
+### 5.101 Le paquet 0.1.0-preview.7, essayé installé, plugin compris
+
+Le 26 novembre 2026. Version passée partout (`package.json`, `cli/main.ts`, le serveur MCP, le SDK
+Python `0.1.0a7` ; `version-coherence.test.ts` : 4 sur 4), CHANGELOG daté. `npm run build`, puis
+`npm run pack:oathrion` avec les vraies valeurs : 40 fichiers, dont `.claude-plugin/plugin.json`
+(version 0.1.0-preview.7), son icône et `hooks/hooks.json` ; ni notes, ni relais, ni secret,
+aucun identifiant privé.
+
+Installé depuis l'archive dans un dossier jetable : `oathrion --version` rend 0.1.0-preview.7 ;
+`claude plugin validate --strict` sur le dossier installé : « Validation passed ». Une vraie
+session de Claude Code avec ce dossier comme plugin, seul : « git push --force origin main »
+refusé avant de partir, le dépôt distant inchangé.
+
+**Ordre de mise en ligne** : d'abord `npm publish` (le catalogue pointe vers le paquet npm : poussé
+avant, il installerait la preview.6, sans plugin), ensuite l'arbre public.

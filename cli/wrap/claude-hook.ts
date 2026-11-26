@@ -35,6 +35,31 @@ oathrion hook claude-code pre|post
   Claude Code's own shell and file writes, and keeps their journal. Not meant to be run by hand.
 `;
 
+/*
+ * LE PLUGIN CLAUDE CODE (26 novembre) : le paquet npm est aussi un plugin (`plugin/`), dont les
+ * hooks appellent ce fichier avec `--plugin`. Si `npx oathrion` a déjà posé nos hooks dans les
+ * réglages, ceux-là jugent déjà chaque action : le plugin se tait, sinon tout serait jugé, et
+ * demandé, deux fois. `OATHRION_PLUGIN_FORCE=1` le fait juger quand même (pour l'essayer).
+ */
+export const PLUGIN_FLAG = "--plugin";
+const SETTINGS_HOOK = /\boathrion\b.*\bclaude-code (pre|post)\b/;
+
+/** Nos hooks sont-ils déjà dans les réglages de Claude Code (personne, projet, local) ? */
+export function settingsHaveOurHook(env: NodeJS.ProcessEnv, projectDir: string): boolean {
+  const home = env.HOME?.trim() || env.USERPROFILE?.trim() || homedir();
+  const files = [join(home, ".claude", "settings.json"), join(projectDir, ".claude", "settings.json"), join(projectDir, ".claude", "settings.local.json")];
+  return files.some((file) => {
+    try {
+      const hooks = (JSON.parse(readFileSync(file, "utf8")) as { hooks?: Record<string, unknown> }).hooks ?? {};
+      return Object.values(hooks).some(
+        (entries) => Array.isArray(entries) && entries.some((entry) => Array.isArray((entry as { hooks?: unknown }).hooks) && ((entry as { hooks: { command?: unknown }[] }).hooks).some((h) => typeof h.command === "string" && !h.command.includes(PLUGIN_FLAG) && SETTINGS_HOOK.test(h.command))),
+      );
+    } catch {
+      return false;
+    }
+  });
+}
+
 export const RULES_FILE = "claude-code-rules.json";
 
 interface HookPayload {
@@ -271,6 +296,7 @@ export async function runClaudeHook(argv: readonly string[], env: NodeJS.Process
   const tool = payload.tool_name ?? "";
   const input = payload.tool_input ?? {};
   const projectDir = env.CLAUDE_PROJECT_DIR?.trim() || payload.cwd || process.cwd();
+  if (argv.includes(PLUGIN_FLAG) && env.OATHRION_PLUGIN_FORCE !== "1" && settingsHaveOurHook(env, projectDir)) return 0;
   const scratchDirs = [tmpdir(), ...(process.platform === "win32" ? [] : ["/tmp"]), ...(typeof payload.scratchpad_dir === "string" ? [payload.scratchpad_dir] : [])];
   const session = payload.session_id ?? null;
 

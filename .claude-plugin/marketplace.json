@@ -1,0 +1,18 @@
+{
+  "name": "oathrion",
+  "description": "Oathrion's plugin for Claude Code: dangerous commands refused, risky ones asked, every action journaled.",
+  "owner": {
+    "name": "Oathrion",
+    "email": "contact@oathrion.com",
+    "url": "https://oathrion.com"
+  },
+  "plugins": [
+    {
+      "name": "oathrion",
+      "source": { "source": "npm", "package": "oathrion" },
+      "description": "Checks Claude Code's shell commands and file edits before they run: the most dangerous are refused, risky ones ask a person, every action is journaled.",
+      "category": "security",
+      "tags": ["security", "hooks", "approval", "audit"]
+    }
+  ]
+}

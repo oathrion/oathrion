@@ -6,6 +6,15 @@ compatibility, and the entry says so.
 
 ## [Unreleased]
 
+## [0.1.0-preview.7] — 2026-11-26
+
+- **Oathrion is a Claude Code plugin.** From inside Claude Code:
+  `/plugin install oathrion --marketplace oathrion/oathrion`. Claude Code's own shell commands and
+  file edits are then checked by the same rules as with `npx oathrion`: the most dangerous refused,
+  risky ones asked, all of them journaled. The plugin does less than `npx oathrion` (no MCP servers,
+  no phone, no rules against reading Oathrion's secrets); if both are installed, the plugin stays
+  quiet, so nothing is judged twice. Needs Node 22 or later.
+
 - **The limits page says what is true today.** `docs/not-yet.md` still said that you could not
   approve from your phone and that receipts carried no signature: both changed in preview.3
   and preview.4. It now says what a signed receipt proves and what it does not (who held the

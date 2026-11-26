@@ -1,0 +1,14 @@
+{
+  "name": "oathrion",
+  "displayName": "Oathrion",
+  "description": "Checks Claude Code's shell commands and file edits before they run: the most dangerous are refused (a recursive delete outside the project, a forced push, a script piped from the internet), risky ones ask a person, and every action goes to a tamper-evident journal. Run npx oathrion to approve from your phone and get signed receipts.",
+  "author": {
+    "name": "Abdoulaye Diallo",
+    "email": "contact@oathrion.com",
+    "url": "https://oathrion.com"
+  },
+  "homepage": "https://oathrion.com",
+  "repository": "https://github.com/oathrion/oathrion",
+  "license": "Apache-2.0",
+  "keywords": ["security", "hooks", "approval", "guardrails", "audit", "agents"]
+}
